@@ -1,6 +1,7 @@
 server:
+  address: 0.0.0.0
   port: ${PORT:10000}
-
+  
 spring:
   application:
     name: kanux-backend
