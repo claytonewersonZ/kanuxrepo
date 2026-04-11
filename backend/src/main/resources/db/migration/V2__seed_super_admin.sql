@@ -1,10 +1,15 @@
--- Seed: cria super admin inicial.
--- IMPORTANTE: troque o auth_user_id pelo UUID real do seu usuário no Supabase
--- Supabase Dashboard -> Authentication -> Users -> copie o UUID do usuário admin
+-- Super admin será criado manualmente via Supabase Dashboard
+-- A migration é mantida para não quebrar o histórico do Flyway
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM user_profiles WHERE email = 'admin@kanux.com') THEN
-        INSERT INTO user_profiles (auth_user_id, display_name, email, is_super_admin)
-        VALUES ('00000000-0000-0000-0000-000000000001'::UUID, 'Super Admin', 'admin@kanux.com', TRUE);
-    END IF;
+  -- Insere apenas se o usuário já existe em auth.users
+  INSERT INTO public.user_profiles (auth_user_id, display_name, email, is_super_admin)
+  SELECT 
+    id,
+    'Super Admin',
+    email,
+    TRUE
+  FROM auth.users
+  WHERE email = 'admin@kanux.com'
+  ON CONFLICT (email) DO NOTHING;
 END $$;
