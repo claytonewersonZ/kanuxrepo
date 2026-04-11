@@ -24,8 +24,7 @@
       "package": "com.kanux.mobile"
     },
     "plugins": [
-      "expo-router",
-      "expo-secure-store"
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
@@ -34,7 +33,10 @@
       "supabaseUrl": "https://amybrdlkfocmiolcnybl.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFteWJyZGxrZm9jbWlvbGNueWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MDQ3ODYsImV4cCI6MjA4Mzk4MDc4Nn0.B4R_9h58oSeC56l_eLafQk1fJpI29cM8T5rzqM5s2lg",
       "apiUrl": "https://kanux-mobile-web-production.up.railway.app",
-      "isProduction": true
+      "isProduction": true,
+      "eas": {
+        "projectId": "a8abab8f-4062-42df-9b42-0ad68186f26c"
+      }
     }
   }
 }

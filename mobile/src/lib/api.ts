@@ -9,7 +9,14 @@ const detectApiUrl = async (): Promise<string> => {
   
   console.log('🔍 Auto-detecting Java Backend API server...');
   
-  for (const url of ) {
+  // URLs to try in order of preference
+  const urlsToTry = [
+    'http://localhost:8080',           // Local development
+    'http://10.0.2.2:8080',            // Android emulator
+    'https://kanux-mobile-web-production.up.railway.app'  // Production
+  ];
+  
+  for (const url of urlsToTry) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);

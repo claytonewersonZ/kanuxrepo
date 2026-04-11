@@ -1,0 +1,13 @@
+[33mWARNING: The legacy expo-cli does not support Node +17. Migrate to the new local Expo CLI: https://blog.expo.dev/the-new-expo-cli-f4250d8e3421.[39m
+┌───────────────────────────────────────────────────────────────────────────┐
+│                                                                           │
+│   The global expo-cli package has been deprecated.                        │
+│                                                                           │
+│   The new Expo CLI is now bundled in your project in the expo package.    │
+│   Learn more: https://blog.expo.dev/the-new-expo-cli-f4250d8e3421.        │
+│                                                                           │
+│   To use the local CLI instead (recommended in SDK 46 and higher), run:   │
+│   › npx expo <command>                                                    │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+{"name":"Kanux","slug":"kanux-mobile","version":"1.0.0","orientation":"portrait","icon":"./assets/icon.png","scheme":"kanux","userInterfaceStyle":"automatic","splash":{"image":"./assets/splash-icon.png","resizeMode":"contain","backgroundColor":"#1a1a2e"},"ios":{"supportsTablet":true,"bundleIdentifier":"com.kanux.mobile"},"android":{"adaptiveIcon":{"foregroundImage":"./assets/adaptive-icon.png","backgroundColor":"#1a1a2e"},"package":"com.kanux.mobile"},"plugins":[],"experiments":{"typedRoutes":true},"extra":{"supabaseUrl":"https://amybrdlkfocmiolcnybl.supabase.co","supabaseAnonKey":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFteWJyZGxrZm9jbWlvbGNueWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MDQ3ODYsImV4cCI6MjA4Mzk4MDc4Nn0.B4R_9h58oSeC56l_eLafQk1fJpI29cM8T5rzqM5s2lg","apiUrl":"https://kanux-mobile-web-production.up.railway.app","isProduction":true},"_internal":{"isDebug":false,"projectRoot":"c:\\Users\\Suporte\\kanux-mobile-web\\mobile","dynamicConfigPath":null,"staticConfigPath":"c:\\Users\\Suporte\\kanux-mobile-web\\mobile\\app.json","packageJsonPath":"c:\\Users\\Suporte\\kanux-mobile-web\\mobile\\package.json"},"sdkVersion":"54.0.0","platforms":[]}

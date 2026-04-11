@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "strict": true,
+    "ignoreDeprecations": "6.0",
     "noImplicitAny": false,
     "jsx": "react-native",
     "esModuleInterop": true,
@@ -9,10 +10,7 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "baseUrl": ".",
-    "types": [
-      "react",
-      "react-native"
-    ],
+    "types": [],
     "paths": {
       "@/*": [
         "src/*"
@@ -29,6 +27,5 @@
   ],
   "exclude": [
     "node_modules"
-  ],
-  "extends": "expo/tsconfig.base"
+  ]
 }
