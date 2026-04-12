@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import 'react-native-url-polyfill';
+import 'react-native-url-polyfill/auto';
 import { ENV } from './env';
 import { api } from './api';
 
@@ -262,7 +262,7 @@ export async function addTicketComment(ticketId: string, content: string): Promi
 
 // Helper to sign out
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
+  const { error } = await (supabase.auth as any).signOut();
   if (error) {
     console.error('Error signing out:', error);
   }

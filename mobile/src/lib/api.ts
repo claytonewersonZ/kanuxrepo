@@ -1,8 +1,6 @@
-
 // Cache for the detected API URL
 let cachedApiUrl: string | null = null;
 let detectionPromise: Promise<string> | null = null;
-
 
 const detectApiUrl = async (): Promise<string> => {
   if (cachedApiUrl) return cachedApiUrl;
@@ -60,15 +58,16 @@ const getApiUrl = (): string => {
 // Initialize API URL detection
 export const initApi = async (): Promise<string> => {
   try {
-    const Constants = require('expo-constants');
-    const configUrl = Constants?.default?.expoConfig?.extra?.apiUrl;
+    const Constants = await import('expo-constants');
+    // Use manifest or default for config (expoConfig deprecated)
+    const configUrl = Constants.default?.manifest?.extra?.apiUrl || Constants.default?.extra?.apiUrl;
     if (configUrl) {
       cachedApiUrl = configUrl;
       console.log('✅ Using configured API URL:', configUrl);
       return configUrl;
     }
     
-    const isProduction = Constants?.default?.expoConfig?.extra?.isProduction;
+    const isProduction = Constants.default?.manifest?.extra?.isProduction || Constants.default?.extra?.isProduction;
     if (isProduction) {
       cachedApiUrl = 'https://your-backend-production.com';
       console.log('✅ Using production API URL:', cachedApiUrl);
