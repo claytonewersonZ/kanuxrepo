@@ -1,5 +1,6 @@
 package com.kanux.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -30,6 +31,7 @@ public class TicketComment {
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_profile_id", insertable = false, updatable = false)
     private UserProfile userProfile;

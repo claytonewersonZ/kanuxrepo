@@ -12,9 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -97,14 +99,33 @@ public class TicketController {
     }
 
     @GetMapping("/{ticketId}/comments")
-    public ResponseEntity<ApiResponse<List<TicketComment>>> getComments(
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getComments(
             @AuthenticationPrincipal UserProfile p, @PathVariable String ticketId) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
-        return ResponseEntity.ok(ApiResponse.ok(commentRepository.findByTicketIdOrderByCreatedAtAsc(UUID.fromString(ticketId))));
+        List<Map<String, Object>> result = commentRepository
+                .findByTicketIdWithProfileOrderByCreatedAtAsc(UUID.fromString(ticketId))
+                .stream().map(c -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("id", c.getId());
+                    map.put("ticket_id", c.getTicketId());
+                    map.put("user_profile_id", c.getUserProfileId());
+                    map.put("content", c.getContent());
+                    map.put("created_at", c.getCreatedAt());
+                    if (c.getUserProfile() != null) {
+                        Map<String, Object> up = new LinkedHashMap<>();
+                        up.put("id", c.getUserProfile().getId());
+                        up.put("display_name", c.getUserProfile().getDisplayName());
+                        up.put("email", c.getUserProfile().getEmail());
+                        up.put("avatar_url", c.getUserProfile().getAvatarUrl());
+                        map.put("user_profile", up);
+                    }
+                    return map;
+                }).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping("/{ticketId}/comments")
-    public ResponseEntity<ApiResponse<TicketComment>> addComment(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> addComment(
             @AuthenticationPrincipal UserProfile p, @PathVariable String ticketId,
             @RequestBody Map<String, String> body) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
@@ -114,6 +135,19 @@ public class TicketController {
         comment.setTicketId(UUID.fromString(ticketId));
         comment.setUserProfileId(p.getId());
         comment.setContent(content);
-        return ResponseEntity.ok(ApiResponse.ok(commentRepository.save(comment)));
+        TicketComment saved = commentRepository.save(comment);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", saved.getId());
+        result.put("ticket_id", saved.getTicketId());
+        result.put("user_profile_id", saved.getUserProfileId());
+        result.put("content", saved.getContent());
+        result.put("created_at", saved.getCreatedAt());
+        Map<String, Object> up = new LinkedHashMap<>();
+        up.put("id", p.getId());
+        up.put("display_name", p.getDisplayName());
+        up.put("email", p.getEmail());
+        up.put("avatar_url", p.getAvatarUrl());
+        result.put("user_profile", up);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }

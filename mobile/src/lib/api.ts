@@ -250,8 +250,12 @@ export const api = {
   },
 
   // Chats
-  async getChats(companyId?: string) {
-    return apiRequest(companyId ? `/api/chats?companyId=${companyId}` : '/api/chats');
+  async getChats(companyId?: string, chatId?: string) {
+    const params = new URLSearchParams();
+    if (companyId) params.set('companyId', companyId);
+    if (chatId) params.set('chatId', chatId);
+    const q = params.toString();
+    return apiRequest(`/api/chats${q ? `?${q}` : ''}`);
   },
 
   async getMessages(chatId: string) {

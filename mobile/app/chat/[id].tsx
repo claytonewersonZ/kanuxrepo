@@ -34,13 +34,8 @@ export default function ChatScreen() {
 
   async function loadChatInfo() {
     try {
-      const result = await api.getChats(undefined);
-      // Buscar chat específico pela API
-      const chatResult = await api.getChats();
-      if (chatResult?.data) {
-        const found = (chatResult.data as Chat[]).find(c => c.id === id);
-        if (found) setChatInfo(found);
-      }
+      const result = await api.getChats(undefined, id);
+      if (result?.data) setChatInfo(result.data as Chat);
     } catch (e) {
       console.error('Erro ao carregar info do chat:', e);
     }
