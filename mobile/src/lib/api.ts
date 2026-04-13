@@ -101,6 +101,10 @@ async function apiRequest<T = any>(endpoint: string, options: RequestInit = {}, 
 
   if (!text || text.trim() === '') {
     if (!response.ok) {
+      // Debug 401: send token to public debug endpoint
+      if (response.status === 401 && authToken) {
+        debugJwt(base, authToken);
+      }
       throw new Error(`Erro HTTP ${response.status}`);
     }
     return {} as T;
@@ -117,10 +121,29 @@ async function apiRequest<T = any>(endpoint: string, options: RequestInit = {}, 
   }
 
   if (!response.ok) {
+    // Debug 401: send token to public debug endpoint
+    if (response.status === 401 && authToken) {
+      debugJwt(base, authToken);
+    }
     throw new Error(data?.error || data?.message || `Erro HTTP ${response.status}`);
   }
 
   return data;
+}
+
+// One-shot debug: validate token via public endpoint (non-blocking)
+let _debugDone = false;
+function debugJwt(base: string, token: string) {
+  if (_debugDone) return;
+  _debugDone = true;
+  fetch(`${base}/api/debug/jwt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+    .then(r => r.text())
+    .then(t => console.error('🔑 JWT DEBUG RESULT:', t))
+    .catch(e => console.error('🔑 JWT DEBUG ERROR:', e));
 }
 
 export const api = {
