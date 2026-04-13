@@ -61,11 +61,12 @@ public class CompanyController {
             map.put("joined_at", m.getJoinedAt());
             UserProfile up = m.getUserProfile();
             if (up != null) {
-                map.put("user_profiles", Map.of(
-                        "id", up.getId(),
-                        "display_name", up.getDisplayName(),
-                        "email", up.getEmail(),
-                        "avatar_url", up.getAvatarUrl()));
+                Map<String, Object> profileMap = new LinkedHashMap<>();
+                profileMap.put("id", up.getId());
+                profileMap.put("display_name", up.getDisplayName());
+                profileMap.put("email", up.getEmail());
+                profileMap.put("avatar_url", up.getAvatarUrl());
+                map.put("user_profiles", profileMap);
             }
             return map;
         }).collect(Collectors.toList());

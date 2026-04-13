@@ -31,6 +31,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/debug/**").permitAll()
+                    .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Return 401 (not 403) for unauthenticated requests
