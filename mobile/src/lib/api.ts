@@ -171,6 +171,9 @@ export const api = {
 
   // Profile
   async getProfile() { return apiRequest('/api/profile'); },
+  async updateProfile(data: { display_name?: string; phone?: string; position?: string; department?: string }) {
+    return apiRequest('/api/profile', { method: 'PATCH', body: JSON.stringify(data) });
+  },
 
   // Companies
   async getUserCompanies() { return apiRequest('/api/companies'); },
@@ -281,7 +284,28 @@ export const api = {
     return apiRequest(`/api/chats?id=${id}`, { method: 'DELETE' });
   },
 
-  // Verify company (no auth)
+  // Membros do Chat
+  async getChatMembers(chatId: string) {
+    return apiRequest(`/api/chats/${chatId}/members`);
+  },
+
+  async addChatMember(chatId: string, userProfileId: string, role = 'MEMBER') {
+    return apiRequest(`/api/chats/${chatId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ user_profile_id: userProfileId, role }),
+    });
+  },
+
+  async removeChatMember(chatId: string, userProfileId: string) {
+    return apiRequest(`/api/chats/${chatId}/members/${userProfileId}`, { method: 'DELETE' });
+  },
+
+  // Departamentos
+  async getDepartments(companyId: string) {
+    return apiRequest(`/api/departments?companyId=${companyId}`);
+  },
+
+  // Verificar empresa (sem auth)
   async verifyCompany(slug: string) {
     return apiRequest('/api/verify-company', {
       method: 'POST',

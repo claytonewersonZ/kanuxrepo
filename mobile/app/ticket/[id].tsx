@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { supabase, Ticket, TicketComment, getTicketComments, addTicketComment, updateTicketStatus, getUserProfile } from '../../src/lib/supabase';
+import { api } from '../../src/lib/api';
 import { colors, spacing } from '../../src/theme';
 
 export default function TicketScreen() {
@@ -90,7 +91,24 @@ export default function TicketScreen() {
     }
   }
 
+  async function handlePriorityChange(newPriority: string) {
+    if (!ticket || !id) return;
+    
+    try {
+      const result = await api.updateTicket({
+        id,
+        priority: newPriority,
+      });
+      if (result?.data) {
+        setTicket(result.data);
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar prioridade:', error);
+    }
+  }
+
   const statusOptions = ['OPEN', 'PENDING', 'RESOLVED', 'CLOSED'];
+  const priorityOptions = ['LOW', 'MEDIUM', 'HIGH'];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -134,7 +152,27 @@ export default function TicketScreen() {
                   ]}
                   onPress={() => handleStatusChange(status)}
                 >
-                  <Text style={styles.statusButtonText}>{status}</Text>
+                  <Text style={styles.statusButtonText}>{getStatusLabel(status)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Priority Actions */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Alterar Prioridade</Text>
+            <View style={styles.statusButtons}>
+              {priorityOptions.map((priority) => (
+                <TouchableOpacity
+                  key={priority}
+                  style={[
+                    styles.statusButton,
+                    ticket.priority === priority && styles.statusButtonActive,
+                    { backgroundColor: getPriorityColor(priority) }
+                  ]}
+                  onPress={() => handlePriorityChange(priority)}
+                >
+                  <Text style={styles.statusButtonText}>{getPriorityLabel(priority)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -192,12 +230,31 @@ function getStatusColor(status: string) {
   }
 }
 
+function getStatusLabel(status: string) {
+  switch (status) {
+    case 'OPEN': return 'Aberto';
+    case 'PENDING': return 'Pendente';
+    case 'RESOLVED': return 'Resolvido';
+    case 'CLOSED': return 'Fechado';
+    default: return status;
+  }
+}
+
 function getPriorityColor(priority: string) {
   switch (priority) {
     case 'HIGH': return colors.priorityHigh;
     case 'MEDIUM': return colors.priorityMedium;
     case 'LOW': return colors.priorityLow;
     default: return colors.textMuted;
+  }
+}
+
+function getPriorityLabel(priority: string) {
+  switch (priority) {
+    case 'HIGH': return 'Alta';
+    case 'MEDIUM': return 'Média';
+    case 'LOW': return 'Baixa';
+    default: return priority;
   }
 }
 

@@ -12,6 +12,7 @@ import java.util.Objects;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,8 +26,10 @@ import com.kanux.dto.ApiResponse;
 import com.kanux.dto.CreateChatRequest;
 import com.kanux.dto.SendMessageRequest;
 import com.kanux.entity.Chat;
+import com.kanux.entity.ChatMember;
 import com.kanux.entity.Message;
 import com.kanux.entity.UserProfile;
+import com.kanux.repository.ChatMemberRepository;
 import com.kanux.repository.ChatRepository;
 import com.kanux.repository.MessageRepository;
 import com.kanux.repository.UserProfileRepository;
@@ -36,14 +39,17 @@ import com.kanux.repository.UserProfileRepository;
 public class ChatController {
 
     private final ChatRepository chatRepository;
+    private final ChatMemberRepository chatMemberRepository;
     private final MessageRepository messageRepository;
     private final UserProfileRepository userProfileRepository;
 
     // chatId -> (userId -> lastTypingTimestampMillis)
     private final Map<UUID, Map<UUID, Long>> typingMap = new ConcurrentHashMap<>();
 
-    public ChatController(ChatRepository chatRepository, MessageRepository messageRepository, UserProfileRepository userProfileRepository) {
+    public ChatController(ChatRepository chatRepository, ChatMemberRepository chatMemberRepository,
+                          MessageRepository messageRepository, UserProfileRepository userProfileRepository) {
         this.chatRepository = chatRepository;
+        this.chatMemberRepository = chatMemberRepository;
         this.messageRepository = messageRepository;
         this.userProfileRepository = userProfileRepository;
     }
@@ -168,6 +174,75 @@ public class ChatController {
                 }).collect(Collectors.toList());
 
         return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    // ==================== Membros do Chat ====================
+
+    @GetMapping("/{chatId}/members")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getChatMembers(
+            @AuthenticationPrincipal UserProfile p, @PathVariable String chatId) {
+        if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Não autorizado"));
+        List<Map<String, Object>> result = chatMemberRepository
+                .findByChatIdWithProfile(UUID.fromString(chatId))
+                .stream().map(cm -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("id", cm.getId());
+                    map.put("chat_id", cm.getChatId());
+                    map.put("user_profile_id", cm.getUserProfileId());
+                    map.put("role", cm.getRole());
+                    map.put("joined_at", cm.getJoinedAt());
+                    if (cm.getUserProfile() != null) {
+                        Map<String, Object> up = new LinkedHashMap<>();
+                        up.put("id", cm.getUserProfile().getId());
+                        up.put("display_name", cm.getUserProfile().getDisplayName());
+                        up.put("email", cm.getUserProfile().getEmail());
+                        up.put("avatar_url", cm.getUserProfile().getAvatarUrl());
+                        map.put("user_profile", up);
+                    }
+                    return map;
+                }).collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @PostMapping("/{chatId}/members")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> addChatMember(
+            @AuthenticationPrincipal UserProfile p, @PathVariable String chatId,
+            @RequestBody Map<String, String> body) {
+        if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Não autorizado"));
+        String userProfileId = body.get("user_profile_id");
+        if (userProfileId == null || userProfileId.isBlank())
+            return ResponseEntity.badRequest().body(ApiResponse.fail("user_profile_id é obrigatório"));
+
+        UUID cId = UUID.fromString(chatId);
+        UUID uId = UUID.fromString(userProfileId);
+
+        if (chatMemberRepository.existsByChatIdAndUserProfileId(cId, uId))
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Usuário já é membro deste chat"));
+
+        ChatMember cm = new ChatMember();
+        cm.setChatId(cId);
+        cm.setUserProfileId(uId);
+        cm.setRole(body.getOrDefault("role", "MEMBER"));
+        ChatMember saved = chatMemberRepository.save(cm);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", saved.getId());
+        result.put("chat_id", saved.getChatId());
+        result.put("user_profile_id", saved.getUserProfileId());
+        result.put("role", saved.getRole());
+        result.put("joined_at", saved.getJoinedAt());
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @Transactional
+    @DeleteMapping("/{chatId}/members/{userProfileId}")
+    public ResponseEntity<ApiResponse<Void>> removeChatMember(
+            @AuthenticationPrincipal UserProfile p, @PathVariable String chatId,
+            @PathVariable String userProfileId) {
+        if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Não autorizado"));
+        chatMemberRepository.deleteByChatIdAndUserProfileId(
+                UUID.fromString(chatId), UUID.fromString(userProfileId));
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
     private Map<String, Object> toMap(Message m) {

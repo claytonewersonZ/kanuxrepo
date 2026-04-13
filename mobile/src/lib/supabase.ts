@@ -28,6 +28,8 @@ export type Profile = {
   display_name: string | null;
   email: string | null;
   avatar_url: string | null;
+  phone: string | null;
+  position: string | null;
   is_super_admin: boolean;
   created_at: string;
 };
@@ -101,6 +103,20 @@ export type Department = {
   created_at: string;
 };
 
+export type ChatMember = {
+  id: string;
+  chat_id: string;
+  user_profile_id: string;
+  role: string;
+  joined_at: string;
+  user_profile?: {
+    id: string;
+    display_name: string | null;
+    email: string | null;
+    avatar_url: string | null;
+  };
+};
+
 // Typing indicator helpers
 export async function setChatTyping(chatId: string, typing: boolean): Promise<any> {
   try {
@@ -144,6 +160,8 @@ export async function getUserProfile(userId?: string): Promise<Profile | null> {
       avatar_url: p.avatar_url ?? p.avatarUrl ?? null,
       is_super_admin: p.is_super_admin ?? p.superAdmin ?? false,
       created_at: p.created_at ?? p.createdAt ?? new Date().toISOString(),
+      phone: p.phone ?? null,
+      position: p.position ?? null,
     };
   } catch (error) {
     console.error('Error fetching profile via API:', error);
@@ -165,6 +183,8 @@ export async function getUserProfile(userId?: string): Promise<Profile | null> {
           avatar_url: user.user_metadata?.avatar_url || null,
           is_super_admin: false,
           created_at: user.created_at,
+          phone: null,
+          position: null,
         };
       }
     } catch (fallbackError) {
@@ -321,6 +341,50 @@ export async function addTicketComment(ticketId: string, content: string): Promi
   } catch (error) {
     console.error('Error adding comment via API:', error);
     return null;
+  }
+}
+
+// Buscar membros de um chat
+export async function getChatMembersForChat(chatId: string): Promise<ChatMember[]> {
+  try {
+    const result = await api.getChatMembers(chatId);
+    return result.data || [];
+  } catch (error) {
+    console.error('Erro ao buscar membros do chat:', error);
+    return [];
+  }
+}
+
+// Adicionar membro ao chat
+export async function addMemberToChat(chatId: string, userProfileId: string): Promise<ChatMember | null> {
+  try {
+    const result = await api.addChatMember(chatId, userProfileId);
+    return result.data || null;
+  } catch (error) {
+    console.error('Erro ao adicionar membro ao chat:', error);
+    return null;
+  }
+}
+
+// Remover membro do chat
+export async function removeMemberFromChat(chatId: string, userProfileId: string): Promise<boolean> {
+  try {
+    await api.removeChatMember(chatId, userProfileId);
+    return true;
+  } catch (error) {
+    console.error('Erro ao remover membro do chat:', error);
+    return false;
+  }
+}
+
+// Buscar departamentos de uma empresa
+export async function getDepartments(companyId: string): Promise<Department[]> {
+  try {
+    const result = await api.getDepartments(companyId);
+    return result.data || [];
+  } catch (error) {
+    console.error('Erro ao buscar departamentos:', error);
+    return [];
   }
 }
 

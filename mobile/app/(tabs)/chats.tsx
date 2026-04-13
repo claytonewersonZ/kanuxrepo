@@ -1,44 +1,58 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Alert, ScrollView } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { getUserCompanies, getCompanyChats, Chat, getCompanyMembers, Profile } from '../../src/lib/supabase';
+import { getUserCompanies, getCompanyChats, Chat, getCompanyMembers, Profile, getDepartments, Department } from '../../src/lib/supabase';
 import { getUserCompany, saveUserCompany } from '../../src/lib/offlineStorage';
 import { api } from '../../src/lib/api';
 import { colors, spacing } from '../../src/theme';
 
-interface ChatWithMember extends Chat {
-  member?: Profile & { role: string };
+interface ChatWithDepartment extends Chat {
+  department?: Department;
 }
 
 export default function ChatsScreen() {
   const { user, profile } = useAuth();
   const router = useRouter();
-  const [chats, setChats] = useState<ChatWithMember[]>([]);
+  const [chats, setChats] = useState<ChatWithDepartment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [companyId, setCompanyId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newChatName, setNewChatName] = useState('');
   const [newChatPrivate, setNewChatPrivate] = useState(false);
+  const [newChatDepartmentId, setNewChatDepartmentId] = useState<string>('');
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [creating, setCreating] = useState(false);
 
   async function loadData() {
     try {
       const companies = await getUserCompanies();
-      // Use saved company or first
+      // Usa empresa salva ou a primeira
       const savedId = await getUserCompany();
       const valid = companies.find(c => c.id === savedId);
       const activeId = valid ? savedId! : companies[0]?.id || '';
       if (activeId) {
         setCompanyId(activeId);
         await saveUserCompany(activeId);
-        const chatsData = await getCompanyChats(activeId);
-        setChats(chatsData as ChatWithMember[]);
+
+        // Carrega chats e departamentos em paralelo
+        const [chatsData, depts] = await Promise.all([
+          getCompanyChats(activeId),
+          getDepartments(activeId),
+        ]);
+        setDepartments(depts);
+
+        // Associa departamento ao chat para exibir na lista
+        const chatsWithDept: ChatWithDepartment[] = chatsData.map(c => ({
+          ...c,
+          department: depts.find(d => d.id === c.department_id) || undefined,
+        }));
+        setChats(chatsWithDept);
       }
     } catch (error) {
-      console.error('Error loading chats:', error);
+      console.error('Erro ao carregar chats:', error);
     } finally {
       setLoading(false);
     }
@@ -63,15 +77,19 @@ export default function ChatsScreen() {
         companyId,
         name: newChatName.trim(),
         isPrivate: newChatPrivate,
+        departmentId: newChatDepartmentId || undefined,
       });
       if (result?.data) {
-        setChats(prev => [result.data as ChatWithMember, ...prev]);
+        const dept = departments.find(d => d.id === newChatDepartmentId);
+        const newChat: ChatWithDepartment = { ...result.data, department: dept };
+        setChats(prev => [newChat, ...prev]);
         setNewChatName('');
         setNewChatPrivate(false);
+        setNewChatDepartmentId('');
         setShowCreateModal(false);
       }
     } catch (error) {
-      console.error('Error creating chat:', error);
+      console.error('Erro ao criar chat:', error);
       Alert.alert('Erro', 'Falha ao criar chat');
     } finally {
       setCreating(false);
@@ -110,11 +128,18 @@ export default function ChatsScreen() {
             </View>
             <View style={styles.chatInfo}>
               <Text style={styles.chatName}>{item.name}</Text>
-              {item.is_private && (
-                <View style={styles.privateBadge}>
-                  <Text style={styles.privateText}>Privado</Text>
-                </View>
-              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                {item.is_private && (
+                  <View style={styles.privateBadge}>
+                    <Text style={styles.privateText}>Privado</Text>
+                  </View>
+                )}
+                {item.department && (
+                  <View style={styles.deptBadge}>
+                    <Text style={styles.deptBadgeText}>{item.department.name}</Text>
+                  </View>
+                )}
+              </View>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </TouchableOpacity>
@@ -165,6 +190,26 @@ export default function ChatsScreen() {
                 {newChatPrivate ? 'Chat Privado' : 'Chat Público'}
               </Text>
             </TouchableOpacity>
+
+            {/* Seletor de Departamento */}
+            <Text style={styles.deptLabel}>Departamento (opcional)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.deptScroll}>
+              <TouchableOpacity
+                style={[styles.deptChip, !newChatDepartmentId && styles.deptChipActive]}
+                onPress={() => setNewChatDepartmentId('')}
+              >
+                <Text style={[styles.deptChipText, !newChatDepartmentId && styles.deptChipTextActive]}>Nenhum</Text>
+              </TouchableOpacity>
+              {departments.map(d => (
+                <TouchableOpacity
+                  key={d.id}
+                  style={[styles.deptChip, newChatDepartmentId === d.id && styles.deptChipActive]}
+                  onPress={() => setNewChatDepartmentId(d.id)}
+                >
+                  <Text style={[styles.deptChipText, newChatDepartmentId === d.id && styles.deptChipTextActive]}>{d.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -350,6 +395,47 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '600',
     fontSize: 16,
+  },
+  deptBadge: {
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  deptBadgeText: {
+    fontSize: 10,
+    color: colors.primaryLight,
+    fontWeight: '600',
+  },
+  deptLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  deptScroll: {
+    marginBottom: spacing.lg,
+    maxHeight: 44,
+  },
+  deptChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    marginRight: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  deptChipActive: {
+    backgroundColor: colors.primary + '30',
+    borderColor: colors.primary,
+  },
+  deptChipText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  deptChipTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });
 

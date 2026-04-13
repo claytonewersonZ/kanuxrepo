@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors } from '../theme';
 
 interface KanuxLogoProps {
@@ -9,18 +9,22 @@ interface KanuxLogoProps {
 
 export default function KanuxLogo({ size = 'md', showText = true }: KanuxLogoProps) {
   const dimensions = {
-    sm: { icon: 40, font: 20, title: 20, subtitle: 10 },
-    md: { icon: 64, font: 32, title: 28, subtitle: 14 },
-    lg: { icon: 88, font: 44, title: 36, subtitle: 16 },
+    sm: { icon: 40, title: 20, subtitle: 10 },
+    md: { icon: 64, title: 28, subtitle: 14 },
+    lg: { icon: 88, title: 36, subtitle: 16 },
   }[size];
 
   return (
     <View style={styles.container}>
-      <View style={[styles.iconContainer, { width: dimensions.icon, height: dimensions.icon, borderRadius: dimensions.icon / 2 }]}>
-        <View style={[styles.innerRing, { width: dimensions.icon - 8, height: dimensions.icon - 8, borderRadius: (dimensions.icon - 8) / 2 }]}>
-          <Text style={[styles.iconText, { fontSize: dimensions.font }]}>K</Text>
-        </View>
-      </View>
+      <Image
+        source={require('../../assets/icon.png')}
+        style={{
+          width: dimensions.icon,
+          height: dimensions.icon,
+          borderRadius: dimensions.icon * 0.22,
+        }}
+        resizeMode="contain"
+      />
       {showText && (
         <View style={styles.textContainer}>
           <Text style={[styles.title, { fontSize: dimensions.title }]}>Kanux</Text>
@@ -34,27 +38,6 @@ export default function KanuxLogo({ size = 'md', showText = true }: KanuxLogoPro
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-  },
-  iconContainer: {
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  innerRing: {
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconText: {
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -1,
   },
   textContainer: {
     alignItems: 'center',

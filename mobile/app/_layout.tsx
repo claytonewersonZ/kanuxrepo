@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { SyncProvider } from '../src/contexts/SyncContext';
 import { colors } from '../src/theme';
-import { ActivityIndicator, View, Text } from 'react-native';
+import { ActivityIndicator, View, Text, Image } from 'react-native';
 
 function AuthGate() {
   const { user, profile, loading } = useAuth();
@@ -37,8 +37,13 @@ function AuthGate() {
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 16, color: colors.text }}>Carregando...</Text>
+        <Image
+          source={require('../assets/icon.png')}
+          style={{ width: 80, height: 80, borderRadius: 18, marginBottom: 16 }}
+          resizeMode="contain"
+        />
+        <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: 1 }}>Kanux</Text>
+        <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 24 }} />
       </View>
     );
   }

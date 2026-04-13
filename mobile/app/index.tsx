@@ -1,11 +1,14 @@
 import {
   View,
   Text,
-  StyleSheet
+  Image,
+  StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
+import { colors } from '../src/theme';
 
 export default function IndexScreen() {
   const { user, profile, loading } = useAuth();
@@ -35,7 +38,21 @@ export default function IndexScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Carregando...</Text>
+      {/* Logo Kanux */}
+      <Image
+        source={require('../assets/icon.png')}
+        style={styles.logo}
+        resizeMode="contain"
+      />
+      <Text style={styles.title}>Kanux</Text>
+      <Text style={styles.subtitle}>HELP DESK</Text>
+      
+      {/* Indicador de carregamento */}
+      <ActivityIndicator
+        size="small"
+        color={colors.primary}
+        style={styles.loader}
+      />
     </View>
   );
 }
@@ -45,10 +62,28 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#09090B',
   },
-  text: {
-    color: '#fff',
-    fontSize: 18,
+  logo: {
+    width: 120,
+    height: 120,
+    borderRadius: 26,
+    marginBottom: 16,
+  },
+  title: {
+    color: '#FAFAFA',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  subtitle: {
+    color: '#A78BFA',
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 4,
+    marginTop: 4,
+  },
+  loader: {
+    marginTop: 40,
   },
 });

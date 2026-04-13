@@ -1,14 +1,53 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, TextInput, Modal } from 'react-native';
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { api } from '../../src/lib/api';
 import { colors, spacing } from '../../src/theme';
 
 export default function ProfileScreen() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const router = useRouter();
 
   const isSuperAdmin = profile?.is_super_admin === true;
+
+  // Estado do modal de edição
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState(profile?.display_name || '');
+  const [editPhone, setEditPhone] = useState(profile?.phone || '');
+  const [editPosition, setEditPosition] = useState(profile?.position || '');
+  const [saving, setSaving] = useState(false);
+
+  function openEditModal() {
+    setEditName(profile?.display_name || '');
+    setEditPhone(profile?.phone || '');
+    setEditPosition(profile?.position || '');
+    setShowEditModal(true);
+  }
+
+  async function handleSaveProfile() {
+    if (!editName.trim()) {
+      Alert.alert('Erro', 'O nome é obrigatório');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.updateProfile({
+        display_name: editName.trim(),
+        phone: editPhone.trim() || undefined,
+        position: editPosition.trim() || undefined,
+      });
+      if (refreshProfile) await refreshProfile();
+      setShowEditModal(false);
+      Alert.alert('Sucesso', 'Perfil atualizado com sucesso');
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      Alert.alert('Erro', 'Falha ao atualizar perfil');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSignOut() {
     Alert.alert(
@@ -30,7 +69,7 @@ export default function ProfileScreen() {
         <View style={styles.avatar}>
           <Ionicons name="person" size={40} color={colors.text} />
         </View>
-        <Text style={styles.name}>{profile?.display_name || 'Usuario'}</Text>
+        <Text style={styles.name}>{profile?.display_name || 'Usuário'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         {isSuperAdmin && (
           <View style={styles.adminBadge}>
@@ -41,7 +80,7 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Informacoes do Perfil</Text>
+        <Text style={styles.sectionTitle}>Informações do Perfil</Text>
         
         <View style={styles.infoItem}>
           <View style={styles.infoRow}>
@@ -57,16 +96,40 @@ export default function ProfileScreen() {
           <View style={styles.infoRow}>
             <Ionicons name="person-circle" size={20} color={colors.primary} />
             <View style={styles.infoContent}>
-        <Text style={styles.infoLabel}>Nome de Exibição</Text>
-              <Text style={styles.infoValue}>{profile?.display_name || 'Carregando perfil...'}</Text>
+              <Text style={styles.infoLabel}>Nome de Exibição</Text>
+              <Text style={styles.infoValue}>{profile?.display_name || 'Não definido'}</Text>
             </View>
           </View>
         </View>
+
+        {profile?.phone && (
+          <View style={styles.infoItem}>
+            <View style={styles.infoRow}>
+              <Ionicons name="call" size={20} color={colors.primary} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Telefone</Text>
+                <Text style={styles.infoValue}>{profile.phone}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {profile?.position && (
+          <View style={styles.infoItem}>
+            <View style={styles.infoRow}>
+              <Ionicons name="briefcase" size={20} color={colors.primary} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Cargo</Text>
+                <Text style={styles.infoValue}>{profile.position}</Text>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
 
       {isSuperAdmin && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Administracao</Text>
+          <Text style={styles.sectionTitle}>Administração</Text>
           
           <TouchableOpacity 
             style={styles.menuItem}
@@ -99,56 +162,12 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Conta</Text>
         
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={openEditModal}>
           <View style={styles.menuRow}>
             <View style={[styles.menuIcon, { backgroundColor: colors.info + '30' }]}>
               <Ionicons name="create" size={20} color={colors.info} />
             </View>
             <Text style={styles.menuText}>Editar Perfil</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <View style={styles.menuRow}>
-            <View style={[styles.menuIcon, { backgroundColor: colors.success + '30' }]}>
-              <Ionicons name="notifications" size={20} color={colors.success} />
-            </View>
-            <Text style={styles.menuText}>Notificacoes</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <View style={styles.menuRow}>
-            <View style={[styles.menuIcon, { backgroundColor: colors.textMuted + '30' }]}>
-              <Ionicons name="lock-closed" size={20} color={colors.textMuted} />
-            </View>
-            <Text style={styles.menuText}>Privacidade</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Suporte</Text>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <View style={styles.menuRow}>
-            <View style={[styles.menuIcon, { backgroundColor: colors.primary + '30' }]}>
-              <Ionicons name="help-circle" size={20} color={colors.primary} />
-            </View>
-            <Text style={styles.menuText}>Ajuda</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem}>
-          <View style={styles.menuRow}>
-            <View style={[styles.menuIcon, { backgroundColor: colors.textSecondary + '30' }]}>
-              <Ionicons name="information-circle" size={20} color={colors.textSecondary} />
-            </View>
-            <Text style={styles.menuText}>Sobre</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </TouchableOpacity>
@@ -162,7 +181,61 @@ export default function ProfileScreen() {
         <Text style={styles.signOutText}>Sair</Text>
       </TouchableOpacity>
 
-      <Text style={styles.version}>Versao 1.0.0</Text>
+      <Text style={styles.version}>Versão 1.0.1</Text>
+
+      {/* Modal de Edição de Perfil */}
+      <Modal visible={showEditModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Editar Perfil</Text>
+
+            <Text style={styles.fieldLabel}>Nome de Exibição</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Seu nome"
+              placeholderTextColor={colors.textMuted}
+              value={editName}
+              onChangeText={setEditName}
+              autoFocus
+            />
+
+            <Text style={styles.fieldLabel}>Telefone</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="(00) 00000-0000"
+              placeholderTextColor={colors.textMuted}
+              value={editPhone}
+              onChangeText={setEditPhone}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={styles.fieldLabel}>Cargo</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ex: Desenvolvedor, Gerente..."
+              placeholderTextColor={colors.textMuted}
+              value={editPosition}
+              onChangeText={setEditPosition}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveButton, saving && { opacity: 0.5 }]}
+                onPress={handleSaveProfile}
+                disabled={saving}
+              >
+                <Text style={styles.modalSaveText}>{saving ? 'Salvando...' : 'Salvar'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -190,5 +263,16 @@ const styles = StyleSheet.create({
   signOutButton: { backgroundColor: colors.error, borderRadius: 8, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.md, gap: spacing.sm },
   signOutText: { fontSize: 16, color: colors.text, fontWeight: '600' },
   version: { textAlign: 'center', color: colors.textMuted, fontSize: 12, marginTop: spacing.lg, marginBottom: spacing.xl },
+  // Modal de edição
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.backgroundLight, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, paddingBottom: spacing.xl },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: spacing.lg },
+  fieldLabel: { fontSize: 14, color: colors.textSecondary, marginBottom: spacing.xs },
+  modalInput: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.md, color: colors.text, fontSize: 16, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
+  modalActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
+  modalCancelButton: { flex: 1, padding: spacing.md, borderRadius: 12, backgroundColor: colors.surface, alignItems: 'center' },
+  modalCancelText: { color: colors.textSecondary, fontWeight: '600', fontSize: 16 },
+  modalSaveButton: { flex: 1, padding: spacing.md, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' },
+  modalSaveText: { color: colors.text, fontWeight: '600', fontSize: 16 },
 });
 
