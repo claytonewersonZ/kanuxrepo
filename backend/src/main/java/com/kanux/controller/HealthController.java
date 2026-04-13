@@ -153,4 +153,18 @@ public class HealthController {
         result.put("overall", "SUCCESS — filter should authenticate this token");
         return ResponseEntity.ok(result);
     }
+
+    /** Debug: check Flyway migration status and test ticket query */
+    @GetMapping("/api/debug/db-status")
+    public ResponseEntity<Map<String, Object>> dbStatus() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            long profileCount = userProfileRepository.count();
+            result.put("user_profiles_count", profileCount);
+        } catch (Exception e) {
+            result.put("user_profiles_error", e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+        result.put("status", "ok");
+        return ResponseEntity.ok(result);
+    }
 }
