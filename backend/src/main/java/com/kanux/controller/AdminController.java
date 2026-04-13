@@ -128,7 +128,6 @@ public class AdminController {
 
     private boolean isSuperAdmin(UserProfile p) { return p != null && p.isSuperAdmin(); }
 
-    @SuppressWarnings("unchecked")
     private <T> ResponseEntity<ApiResponse<T>> forbidden() {
         return ResponseEntity.status(403).body(ApiResponse.fail("Acesso negado: Super Admin necessário"));
     }

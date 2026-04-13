@@ -66,7 +66,7 @@ public class JwtService {
             return resolvedKey;
         } catch (io.jsonwebtoken.security.SignatureException e) {
             // signature mismatch — try base64
-        } catch (Exception e) {
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException e) {
             // other error (expired, malformed) but signature was OK
             resolvedKey = rawKey;
             log.info("JWT key resolved: raw UTF-8 ({} chars)", secret.length());
@@ -81,18 +81,16 @@ public class JwtService {
             resolvedKey = b64Key;
             log.info("JWT key resolved: base64-decoded ({} bytes)", decoded.length);
             return resolvedKey;
-        } catch (io.jsonwebtoken.security.SignatureException e2) {
-            // also failed
-        } catch (IllegalArgumentException e2) {
-            // not valid base64
-        } catch (Exception e2) {
-            // other error but base64 key passed signature check
+        } catch (io.jsonwebtoken.security.SignatureException | IllegalArgumentException e2) {
+            // signature also failed or not valid base64
+        } catch (io.jsonwebtoken.JwtException e2) {
+            // other error (expired, malformed) but base64 key signature was OK
             try {
                 byte[] decoded = Base64.getDecoder().decode(secret);
                 resolvedKey = Keys.hmacShaKeyFor(decoded);
                 log.info("JWT key resolved: base64-decoded ({} bytes)", decoded.length);
                 return resolvedKey;
-            } catch (Exception ignored) {}
+            } catch (IllegalArgumentException ignored) {}
         }
 
         // Fallback: use raw key and let the caller handle the error

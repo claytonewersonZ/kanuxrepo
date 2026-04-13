@@ -83,17 +83,26 @@ let authToken: string | null = null;
 export const setAuthToken = (token: string | null) => authToken = token;
 export const getAuthToken = (): string | null => authToken;
 
-const getHeaders = (requiresAuth = true): HeadersInit => ({
-  'Content-Type': 'application/json',
-  ...(requiresAuth && authToken && { Authorization: `Bearer ${authToken}` }),
-});
+const getHeaders = (requiresAuth = true): HeadersInit => {
+  if (requiresAuth && !authToken) {
+    console.warn('⚠️ API call requires auth but no token set!');
+  }
+  return {
+    'Content-Type': 'application/json',
+    ...(requiresAuth && authToken && { Authorization: `Bearer ${authToken}` }),
+  };
+};
 
 // Generic API request (resolve base URL at request time to allow detection/init)
 async function apiRequest<T = any>(endpoint: string, options: RequestInit = {}, requiresAuth = true): Promise<T> {
   const base = await initApi();
+  const headers = { ...getHeaders(requiresAuth), ...options.headers };
+  
+  console.log(`📡 API ${options.method || 'GET'} ${endpoint} | auth=${!!authToken} | token=${authToken ? authToken.substring(0, 20) + '...' : 'null'}`);
+  
   const response = await fetch(`${base}${endpoint}`, {
     ...options,
-    headers: { ...getHeaders(requiresAuth), ...options.headers },
+    headers,
   });
 
   // Read body as text first to handle empty or non-JSON responses safely
