@@ -4,9 +4,11 @@ import {
 } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/lib/supabase';
 import { api, initApi, setAuthToken } from '../../src/lib/api';
 import { colors, spacing, borderRadius, shadows } from '../../src/theme';
+import KanuxLogo from '../../src/components/KanuxLogo';
 
 export default function LoginScreen() {
   const [email, setEmail]             = useState('');
@@ -14,6 +16,7 @@ export default function LoginScreen() {
   const [companySlug, setCompanySlug] = useState('');
   const [loading, setLoading]         = useState(false);
   const [isSignUp, setIsSignUp]       = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   useEffect(() => { initApi().catch(() => {}); }, []);
@@ -44,32 +47,48 @@ export default function LoginScreen() {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View style={styles.logoContainer}><Text style={styles.logo}>K</Text></View>
-          <Text style={styles.title}>Kanux</Text>
+          <KanuxLogo size="lg" />
           <Text style={styles.subtitle}>{isSignUp ? 'Crie sua conta' : 'Bem-vindo de volta'}</Text>
         </View>
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Email</Text>
-            <TextInput style={styles.input} placeholder="seu@email.com" placeholderTextColor={colors.textMuted}
-              value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+            <View style={styles.inputWrapper}>
+              <Ionicons name="mail-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput style={styles.inputWithIcon} placeholder="seu@email.com" placeholderTextColor={colors.textMuted}
+                value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+            </View>
           </View>
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Senha</Text>
-            <TextInput style={styles.input} placeholder="••••••••" placeholderTextColor={colors.textMuted}
-              value={password} onChangeText={setPassword} secureTextEntry />
+            <View style={styles.inputWrapper}>
+              <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput style={styles.inputWithIcon} placeholder="••••••••" placeholderTextColor={colors.textMuted}
+                value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
           </View>
           {!isSignUp && (
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Número da Empresa</Text>
-              <TextInput style={styles.input} placeholder="1000" placeholderTextColor={colors.textMuted}
-                value={companySlug} onChangeText={setCompanySlug} keyboardType="numeric" />
+              <View style={styles.inputWrapper}>
+                <Ionicons name="business-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
+                <TextInput style={styles.inputWithIcon} placeholder="1000" placeholderTextColor={colors.textMuted}
+                  value={companySlug} onChangeText={setCompanySlug} keyboardType="numeric" />
+              </View>
             </View>
           )}
           <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleAuth} disabled={loading} activeOpacity={0.8}>
             {loading ? <ActivityIndicator color={colors.text} />
-              : <Text style={styles.buttonText}>{isSignUp ? 'Criar Conta' : 'Entrar'}</Text>}
+              : (
+                <View style={styles.buttonContent}>
+                  <Ionicons name={isSignUp ? 'person-add' : 'log-in'} size={20} color={colors.text} />
+                  <Text style={styles.buttonText}>{isSignUp ? 'Criar Conta' : 'Entrar'}</Text>
+                </View>
+              )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.linkButton} onPress={() => setIsSignUp(!isSignUp)}>
             <Text style={styles.linkText}>
@@ -77,7 +96,7 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.footer}>© 2024 Kanux</Text>
+        <Text style={styles.footer}>© 2025 Kanux - Help Desk</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -86,17 +105,18 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: colors.background },
   scrollContent:  { flexGrow: 1, padding: spacing.lg, justifyContent: 'center' },
-  header:         { alignItems: 'center', marginBottom: spacing.xxl },
-  logoContainer:  { width: 80, height: 80, borderRadius: borderRadius.full, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md, ...shadows.brand },
-  logo:           { fontSize: 40, fontWeight: 'bold', color: colors.text },
-  title:          { fontSize: 32, fontWeight: 'bold', color: colors.text, marginBottom: spacing.xs },
-  subtitle:       { fontSize: 16, color: colors.textSecondary },
+  header:         { alignItems: 'center', marginBottom: spacing.xl },
+  subtitle:       { fontSize: 16, color: colors.textSecondary, marginTop: spacing.lg },
   form:           { width: '100%' },
   inputContainer: { marginBottom: spacing.md },
   inputLabel:     { fontSize: 14, fontWeight: '500', color: colors.textSecondary, marginBottom: spacing.xs },
-  input:          { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, color: colors.text, fontSize: 16, borderWidth: 1, borderColor: colors.border },
-  button:         { backgroundColor: colors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.md, ...shadows.brand },
+  inputWrapper:   { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border },
+  inputIcon:      { paddingLeft: spacing.md },
+  inputWithIcon:  { flex: 1, padding: spacing.md, color: colors.text, fontSize: 16 },
+  eyeButton:      { padding: spacing.md },
+  button:         { backgroundColor: colors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg, ...shadows.brand },
   buttonDisabled: { opacity: 0.6 },
+  buttonContent:  { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   buttonText:     { color: colors.text, fontSize: 18, fontWeight: '600' },
   linkButton:     { marginTop: spacing.lg, alignItems: 'center', padding: spacing.sm },
   linkText:       { color: colors.primary, fontSize: 15, fontWeight: '500' },

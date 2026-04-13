@@ -4,7 +4,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { getUserCompanies, getCompanyTickets, Company, Ticket } from '../../src/lib/supabase';
-import { colors, spacing } from '../../src/theme';
+import { colors, spacing, borderRadius, shadows } from '../../src/theme';
+import KanuxLogo from '../../src/components/KanuxLogo';
 
 export default function HomeScreen() {
   const { user, profile } = useAuth();
@@ -62,13 +63,16 @@ export default function HomeScreen() {
     >
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.greeting}>Ola, {profile?.display_name || user?.email?.split('@')[0] || 'Usuario'}!</Text>
-            <Text style={styles.subtitle}>Bem-vindo ao Kanux</Text>
+          <View style={styles.headerLeft}>
+            <KanuxLogo size="sm" showText={false} />
+            <View style={styles.greetingContainer}>
+              <Text style={styles.greeting}>Olá, {profile?.display_name || user?.email?.split('@')[0] || 'Usuário'}!</Text>
+              <Text style={styles.subtitle}>Bem-vindo ao Kanux</Text>
+            </View>
           </View>
-          <View style={styles.avatar}>
+          <TouchableOpacity style={styles.avatar} onPress={() => router.push('/(tabs)/profile')}>
             <Ionicons name="person" size={24} color={colors.text} />
-          </View>
+          </TouchableOpacity>
         </View>
         
         {isSuperAdmin && (
@@ -238,10 +242,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md },
   header: { marginBottom: spacing.lg },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  greeting: { fontSize: 28, fontWeight: 'bold', color: colors.text },
-  subtitle: { fontSize: 16, color: colors.textSecondary, marginTop: spacing.xs },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
+  greetingContainer: { flex: 1 },
+  greeting: { fontSize: 22, fontWeight: 'bold', color: colors.text },
+  subtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
   superAdminBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.warning + '20', paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 20, alignSelf: 'flex-start', marginTop: spacing.md, gap: spacing.xs },
   superAdminText: { color: colors.warning, fontWeight: '600', fontSize: 12 },
   section: { marginBottom: spacing.lg },

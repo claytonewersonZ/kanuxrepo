@@ -39,11 +39,11 @@ public class Ticket {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = TicketStatusConverter.class)
     @Column(nullable = false)
     private TicketStatus status = TicketStatus.OPEN;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = TicketPriorityConverter.class)
     @Column(nullable = false)
     private TicketPriority priority = TicketPriority.MEDIUM;
 

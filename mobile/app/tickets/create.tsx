@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { getUserCompanies, createTicket } from '../../src/lib/supabase';
@@ -13,6 +13,22 @@ export default function CreateTicketScreen() {
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [loading, setLoading] = useState(false);
   const [companyId, setCompanyId] = useState<string>('');
+  const [loadingCompany, setLoadingCompany] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const companies = await getUserCompanies();
+        if (companies.length > 0) {
+          setCompanyId(companies[0].id);
+        }
+      } catch (error) {
+        console.error('Error loading companies for ticket creation:', error);
+      } finally {
+        setLoadingCompany(false);
+      }
+    })();
+  }, []);
 
   async function handleCreate() {
     if (!title.trim()) {

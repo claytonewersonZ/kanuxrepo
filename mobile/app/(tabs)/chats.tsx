@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { getUserCompanies, getCompanyChats, Chat, getCompanyMembers, Profile } from '../../src/lib/supabase';
+import { api } from '../../src/lib/api';
 import { colors, spacing } from '../../src/theme';
 
 interface ChatWithMember extends Chat {
@@ -15,23 +17,19 @@ export default function ChatsScreen() {
   const [chats, setChats] = useState<ChatWithMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [companyId, setCompanyId] = useState<string>('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newChatName, setNewChatName] = useState('');
+  const [newChatPrivate, setNewChatPrivate] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   async function loadData() {
     try {
       const companies = await getUserCompanies();
       if (companies.length > 0) {
+        setCompanyId(companies[0].id);
         const chatsData = await getCompanyChats(companies[0].id);
-        
-        // Get member info for each chat
-        const chatsWithMembers = await Promise.all(
-          chatsData.map(async (chat) => {
-            const members = await getCompanyMembers(companies[0].id);
-            const member = members.find(m => m.id === profile?.id);
-            return { ...chat, member: member ? { ...member, role: member.role || 'MEMBER' } : undefined };
-          })
-        );
-        
-        setChats(chatsWithMembers);
+        setChats(chatsData as ChatWithMember[]);
       }
     } catch (error) {
       console.error('Error loading chats:', error);
@@ -43,6 +41,36 @@ export default function ChatsScreen() {
   useEffect(() => {
     loadData();
   }, [profile]);
+
+  async function handleCreateChat() {
+    if (!newChatName.trim()) {
+      Alert.alert('Erro', 'Digite o nome do chat');
+      return;
+    }
+    if (!companyId) {
+      Alert.alert('Erro', 'Nenhuma empresa encontrada');
+      return;
+    }
+    setCreating(true);
+    try {
+      const result = await api.createChat({
+        companyId,
+        name: newChatName.trim(),
+        isPrivate: newChatPrivate,
+      });
+      if (result?.data) {
+        setChats(prev => [result.data as ChatWithMember, ...prev]);
+        setNewChatName('');
+        setNewChatPrivate(false);
+        setShowCreateModal(false);
+      }
+    } catch (error) {
+      console.error('Error creating chat:', error);
+      Alert.alert('Erro', 'Falha ao criar chat');
+    } finally {
+      setCreating(false);
+    }
+  }
 
   const filteredChats = chats.filter(chat =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -82,15 +110,74 @@ export default function ChatsScreen() {
                 </View>
               )}
             </View>
-            <Text style={styles.arrow}>›</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
+            <Ionicons name="chatbubbles-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyText}>Nenhum chat encontrado</Text>
+            <Text style={styles.emptySubtext}>Crie um novo chat para começar</Text>
           </View>
         }
       />
+
+      {/* FAB - Create Chat */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowCreateModal(true)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={28} color={colors.text} />
+      </TouchableOpacity>
+
+      {/* Create Chat Modal */}
+      <Modal visible={showCreateModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Novo Chat</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Nome do chat"
+              placeholderTextColor={colors.textMuted}
+              value={newChatName}
+              onChangeText={setNewChatName}
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={styles.privateToggle}
+              onPress={() => setNewChatPrivate(!newChatPrivate)}
+            >
+              <Ionicons
+                name={newChatPrivate ? 'lock-closed' : 'lock-open'}
+                size={20}
+                color={newChatPrivate ? colors.warning : colors.textMuted}
+              />
+              <Text style={styles.privateToggleText}>
+                {newChatPrivate ? 'Chat Privado' : 'Chat Público'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => { setShowCreateModal(false); setNewChatName(''); }}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalCreateButton, creating && { opacity: 0.5 }]}
+                onPress={handleCreateChat}
+                disabled={creating}
+              >
+                <Text style={styles.modalCreateText}>{creating ? 'Criando...' : 'Criar'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -105,13 +192,16 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     backgroundColor: colors.surface,
-    borderRadius: 8,
-    padding: spacing.sm,
+    borderRadius: 12,
+    padding: spacing.md,
     color: colors.text,
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   list: {
     padding: spacing.md,
+    paddingBottom: 80,
   },
   chatItem: {
     backgroundColor: colors.surface,
@@ -144,7 +234,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   privateBadge: {
-    backgroundColor: colors.warning,
+    backgroundColor: colors.warning + '20',
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: 4,
@@ -153,19 +243,106 @@ const styles = StyleSheet.create({
   },
   privateText: {
     fontSize: 10,
-    color: colors.text,
+    color: colors.warning,
     fontWeight: '600',
-  },
-  arrow: {
-    fontSize: 24,
-    color: colors.textMuted,
   },
   empty: {
     alignItems: 'center',
     padding: spacing.xl,
+    gap: spacing.sm,
   },
   emptyText: {
     color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptySubtext: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.backgroundLight,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: spacing.lg,
+  },
+  modalInput: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: spacing.md,
+    color: colors.text,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  privateToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    marginBottom: spacing.lg,
+  },
+  privateToggleText: {
+    color: colors.text,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalCancelButton: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  modalCreateButton: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  modalCreateText: {
+    color: colors.text,
+    fontWeight: '600',
     fontSize: 16,
   },
 });

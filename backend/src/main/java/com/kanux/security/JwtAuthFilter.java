@@ -50,50 +50,68 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             Claims claims = jwtService.getClaims(token);
             UUID authUserId = UUID.fromString(claims.getSubject());
 
-            // Find existing profile or create one on first login
-            Optional<UserProfile> profileOpt = userProfileRepository.findByAuthUserId(authUserId);
-            UserProfile profile;
-            if (profileOpt.isPresent()) {
-                profile = profileOpt.get();
-            } else {
-                // Auto-provision profile from Supabase JWT claims
-                profile = new UserProfile();
-                profile.setAuthUserId(authUserId);
-
-                String email = claims.get("email", String.class);
-                if (email == null || email.isBlank()) {
-                    // email sometimes nested under user_metadata
-                    try {
-                        @SuppressWarnings("unchecked")
-                        java.util.Map<String, Object> meta =
-                                (java.util.Map<String, Object>) claims.get("user_metadata");
-                        if (meta != null && meta.get("email") instanceof String s) email = s;
-                    } catch (Exception ignored) {}
-                }
-                profile.setEmail(email);
-
-                // Try to get display name from user_metadata
+            // Find existing profile or create one on first login (with retry for transient DB errors)
+            UserProfile profile = null;
+            Exception lastError = null;
+            for (int attempt = 0; attempt < 3; attempt++) {
                 try {
-                    @SuppressWarnings("unchecked")
-                    java.util.Map<String, Object> meta =
-                            (java.util.Map<String, Object>) claims.get("user_metadata");
-                    if (meta != null) {
-                        String name = null;
-                        if (meta.get("full_name") instanceof String s) name = s;
-                        else if (meta.get("name") instanceof String s) name = s;
-                        else if (meta.get("display_name") instanceof String s) name = s;
-                        if (name != null && !name.isBlank()) profile.setDisplayName(name);
+                    Optional<UserProfile> profileOpt = userProfileRepository.findByAuthUserId(authUserId);
+                    if (profileOpt.isPresent()) {
+                        profile = profileOpt.get();
+                    } else {
+                        // Auto-provision profile from Supabase JWT claims
+                        profile = new UserProfile();
+                        profile.setAuthUserId(authUserId);
+
+                        String email = claims.get("email", String.class);
+                        if (email == null || email.isBlank()) {
+                            try {
+                                @SuppressWarnings("unchecked")
+                                java.util.Map<String, Object> meta =
+                                        (java.util.Map<String, Object>) claims.get("user_metadata");
+                                if (meta != null && meta.get("email") instanceof String s) email = s;
+                            } catch (Exception ignored) {}
+                        }
+                        profile.setEmail(email);
+
+                        try {
+                            @SuppressWarnings("unchecked")
+                            java.util.Map<String, Object> meta =
+                                    (java.util.Map<String, Object>) claims.get("user_metadata");
+                            if (meta != null) {
+                                String name = null;
+                                if (meta.get("full_name") instanceof String s) name = s;
+                                else if (meta.get("name") instanceof String s) name = s;
+                                else if (meta.get("display_name") instanceof String s) name = s;
+                                if (name != null && !name.isBlank()) profile.setDisplayName(name);
+                            }
+                        } catch (Exception ignored) {}
+
+                        if (profile.getDisplayName() == null && email != null) {
+                            profile.setDisplayName(email.split("@")[0]);
+                        }
+
+                        profile = userProfileRepository.save(profile);
+                        log.info("Auto-provisioned profile for user {}", authUserId);
                     }
-                } catch (Exception ignored) {}
-
-                if (profile.getDisplayName() == null && email != null) {
-                    profile.setDisplayName(email.split("@")[0]);
+                    lastError = null;
+                    break; // success
+                } catch (Exception dbError) {
+                    lastError = dbError;
+                    log.warn("DB lookup attempt {} failed for user {}: {}", attempt + 1, authUserId, dbError.getMessage());
+                    if (attempt < 2) {
+                        try { Thread.sleep(100 * (attempt + 1)); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                    }
                 }
-
-                profile = userProfileRepository.save(profile);
-                log.info("Auto-provisioned profile for user {}", authUserId);
             }
 
+            if (profile == null && lastError != null) {
+                log.error("All DB attempts failed for JWT user {}: {}", authUserId, lastError.getMessage());
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            @SuppressWarnings("null")
             var auth = new UsernamePasswordAuthenticationToken(
                     profile, null,
                     profile.isSuperAdmin()
