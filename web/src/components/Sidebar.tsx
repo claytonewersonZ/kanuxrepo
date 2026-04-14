@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { apiClient } from "@/lib/apiClient";
+import apiClient from "@/lib/apiClient";
 
 interface SidebarProps {
   children?: React.ReactNode;

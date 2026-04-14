@@ -86,6 +86,7 @@ public class ChatController {
         if (req.getDepartmentId() != null) chat.setDepartmentId(UUID.fromString(req.getDepartmentId()));
         chat.setName(req.getName());
         chat.setPrivateChat(req.isPrivate());
+        chat.setOnlyAdminsSend(req.isOnlyAdminsSend());
         chat.setCreatedBy(p.getId());
         Chat savedChat = chatRepository.save(chat);
         return ResponseEntity.ok(ApiResponse.ok(savedChat));

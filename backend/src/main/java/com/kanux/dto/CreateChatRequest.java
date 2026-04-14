@@ -16,4 +16,8 @@ public class CreateChatRequest {
     @JsonProperty("is_private")
     @JsonAlias({"isPrivate", "private"})
     private boolean isPrivate;
+
+    @JsonProperty("only_admins_send")
+    @JsonAlias({"onlyAdminsSend"})
+    private boolean onlyAdminsSend;
 }

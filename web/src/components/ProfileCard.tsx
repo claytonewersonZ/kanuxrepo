@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { apiClient } from "@/lib/apiClient";
+import apiClient from "@/lib/apiClient";
 
 export default function ProfileCard(){
   const [profile, setProfile] = useState<any>(null);
