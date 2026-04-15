@@ -260,6 +260,7 @@ public class ChatController {
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @SuppressWarnings("null")
     private Map<String, Object> toMap(Message m) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", m.getId()); map.put("chat_id", m.getChatId());
@@ -269,7 +270,8 @@ public class ChatController {
 
         // Include user profile info for display
         if (m.getUserProfileId() != null) {
-            userProfileRepository.findById(m.getUserProfileId()).ifPresent(up -> {
+            UUID profileId = m.getUserProfileId();
+            userProfileRepository.findById(profileId).ifPresent(up -> {
                 map.put("display_name", up.getDisplayName());
                 map.put("avatar_url", up.getAvatarUrl());
             });

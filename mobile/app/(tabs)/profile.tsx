@@ -1,9 +1,11 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, TextInput, Modal, Image, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { api } from '../../src/lib/api';
+import { supabase } from '../../src/lib/supabase';
 import { colors, spacing } from '../../src/theme';
 
 export default function ProfileScreen() {
@@ -18,6 +20,67 @@ export default function ProfileScreen() {
   const [editPhone, setEditPhone] = useState(profile?.phone || '');
   const [editPosition, setEditPosition] = useState(profile?.position || '');
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  async function handlePickAvatar() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão necessária', 'Precisamos de acesso à galeria para escolher uma foto.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    setUploadingPhoto(true);
+    try {
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${profile?.id || 'user'}_${Date.now()}.${ext}`;
+      const filePath = `avatars/${fileName}`;
+
+      // Read file as blob for upload
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      // Upload using fetch to Supabase Storage REST API
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const supabaseUrl = supabase.supabaseUrl || (supabase as any).url || '';
+
+      const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/avatars/${fileName}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': asset.mimeType || 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: blob,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        throw new Error(errText || 'Upload falhou');
+      }
+
+      // Build public URL
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/${filePath}`;
+
+      // Update profile with new avatar URL
+      await api.updateProfile({ avatar_url: publicUrl });
+      if (refreshProfile) await refreshProfile();
+      Alert.alert('Sucesso', 'Foto de perfil atualizada!');
+    } catch (error: any) {
+      console.error('Erro ao fazer upload da foto:', error);
+      Alert.alert('Erro', error.message || 'Falha ao fazer upload da foto');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   function openEditModal() {
     setEditName(profile?.display_name || '');
@@ -66,9 +129,22 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={40} color={colors.text} />
-        </View>
+        <TouchableOpacity onPress={handlePickAvatar} style={styles.avatarWrapper} disabled={uploadingPhoto}>
+          {profile?.avatar_url ? (
+            <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Ionicons name="person" size={40} color={colors.text} />
+            </View>
+          )}
+          <View style={styles.avatarEditBadge}>
+            {uploadingPhoto ? (
+              <ActivityIndicator size={14} color={colors.text} />
+            ) : (
+              <Ionicons name="camera" size={14} color={colors.text} />
+            )}
+          </View>
+        </TouchableOpacity>
         <Text style={styles.name}>{profile?.display_name || 'Usuário'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         {isSuperAdmin && (
@@ -245,6 +321,9 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md },
   header: { alignItems: 'center', paddingVertical: spacing.xl },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  avatarImage: { width: 80, height: 80, borderRadius: 40 },
+  avatarWrapper: { position: 'relative' as const, marginBottom: spacing.md },
+  avatarEditBadge: { position: 'absolute' as const, bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.background },
   name: { fontSize: 24, fontWeight: 'bold', color: colors.text },
   email: { fontSize: 14, color: colors.textSecondary, marginTop: spacing.xs },
   adminBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.warning, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 16, marginTop: spacing.sm, gap: spacing.xs },

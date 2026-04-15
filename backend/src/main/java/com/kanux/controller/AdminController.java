@@ -136,7 +136,7 @@ public class AdminController {
     }
 
     @PostMapping("/create-user")
-    @SuppressWarnings("UseSpecificCatch")
+    @SuppressWarnings({"UseSpecificCatch", "null"})
     public ResponseEntity<ApiResponse<Map<String, Object>>> createUser(
             @AuthenticationPrincipal UserProfile p, @RequestBody Map<String, String> body) {
         if (!isSuperAdmin(p)) return forbidden();
@@ -171,10 +171,11 @@ public class AdminController {
             // Check if user already exists in Supabase Auth — if so, reuse the id
             try {
                 HttpEntity<Void> getEntity = new HttpEntity<>(headers);
+                HttpMethod getMethod = HttpMethod.GET;
                 @SuppressWarnings("unchecked")
                 Map<String, Object> existingCheck = rest.exchange(
                         supabaseUrl + "/auth/v1/admin/users?page=1&per_page=50",
-                        HttpMethod.GET, getEntity, Map.class).getBody();
+                        getMethod, getEntity, Map.class).getBody();
                 // Supabase returns { users: [...] }
                 List<?> users = existingCheck != null ? (List<?>) existingCheck.get("users") : null;
                 UUID foundId = null;

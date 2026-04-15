@@ -171,7 +171,7 @@ export const api = {
 
   // Profile
   async getProfile() { return apiRequest('/api/profile'); },
-  async updateProfile(data: { display_name?: string; phone?: string; position?: string; department?: string }) {
+  async updateProfile(data: { display_name?: string; phone?: string; position?: string; department?: string; avatar_url?: string }) {
     return apiRequest('/api/profile', { method: 'PATCH', body: JSON.stringify(data) });
   },
 
