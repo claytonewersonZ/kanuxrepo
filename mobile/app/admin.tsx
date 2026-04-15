@@ -14,7 +14,7 @@ interface Member {
 }
 interface Chat { id: string; name: string; is_private: boolean; only_admins_send?: boolean; department_id?: string; }
 interface Department { id: string; name: string; slug: string; }
-interface ChatMember { id?: string; user_profile_id: string; role: string; user_profiles?: { display_name: string; email: string; }; }
+interface ChatMember { id?: string; user_profile_id: string; role: string; user_profile?: { display_name: string; email: string; }; }
 
 const ROLE_ORDER = ['MEMBER', 'MANAGER', 'ADMIN'];
 const ROLE_COLORS: Record<string, string> = {
@@ -65,6 +65,12 @@ export default function AdminScreen() {
   const [showCreateDept, setShowCreateDept] = useState(false);
   const [newDeptName, setNewDeptName] = useState('');
   const [savingDept, setSavingDept] = useState(false);
+
+  // ── Department Members Modal ───────────────────────────────────────────────
+  const [showDeptMembers, setShowDeptMembers] = useState(false);
+  const [selectedDept, setSelectedDept] = useState<Department | null>(null);
+  const [deptMembers, setDeptMembers] = useState<any[]>([]);
+  const [loadingDeptMembers, setLoadingDeptMembers] = useState(false);
 
   useEffect(() => { checkSuperAdmin(); }, []);
   useEffect(() => { if (isSuperAdminUser) loadCompanies(); }, [isSuperAdminUser]);
@@ -258,6 +264,37 @@ export default function AdminScreen() {
       },
     ]);
   }
+
+  async function openDeptMembers(dept: Department) {
+    setSelectedDept(dept);
+    setLoadingDeptMembers(true);
+    setShowDeptMembers(true);
+    try {
+      const res = await api.getDeptMembers(dept.id);
+      setDeptMembers(res?.data || []);
+    } catch (e: any) { Alert.alert('Erro', e.message); }
+    finally { setLoadingDeptMembers(false); }
+  }
+
+  async function handleAddMemberToDept(userProfileId: string) {
+    if (!selectedDept) return;
+    try {
+      await api.addDeptMember(selectedDept.id, userProfileId);
+      const res = await api.getDeptMembers(selectedDept.id);
+      setDeptMembers(res?.data || []);
+    } catch (e: any) { Alert.alert('Erro', e.message); }
+  }
+
+  async function handleRemoveMemberFromDept(userProfileId: string) {
+    if (!selectedDept) return;
+    try {
+      await api.removeDeptMember(selectedDept.id, userProfileId);
+      setDeptMembers(prev => prev.filter((m: any) => m.user_profile_id !== userProfileId));
+    } catch (e: any) { Alert.alert('Erro', e.message); }
+  }
+
+  const deptMemberIds = new Set(deptMembers.map((m: any) => m.user_profile_id));
+  const membersNotInDept = members.filter(m => !deptMemberIds.has(m.user_profile_id));
 
   if (loading || !isSuperAdminUser) {
     return <View style={styles.loadingContainer}><Text style={styles.loadingText}>Carregando...</Text></View>;
@@ -468,6 +505,9 @@ export default function AdminScreen() {
                   <Text style={styles.deptName}>{dept.name}</Text>
                   <Text style={styles.deptSlug}>@{dept.slug}</Text>
                 </View>
+                <TouchableOpacity onPress={() => openDeptMembers(dept)} style={{ padding: 4 }}>
+                  <Ionicons name="people-outline" size={18} color={colors.primary} />
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleDeleteDept(dept)} style={{ padding: 4 }}>
                   <Ionicons name="trash-outline" size={18} color={colors.error ?? '#EF4444'} />
                 </TouchableOpacity>
@@ -662,12 +702,12 @@ export default function AdminScreen() {
                   <View key={cm.user_profile_id} style={styles.chatMemberRow}>
                     <View style={styles.memberAvatar}>
                       <Text style={styles.memberAvatarText}>
-                        {(cm.user_profiles?.display_name || 'U').charAt(0).toUpperCase()}
+                        {(cm.user_profile?.display_name || 'U').charAt(0).toUpperCase()}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.memberName}>{cm.user_profiles?.display_name || cm.user_profile_id.slice(0, 8)}</Text>
-                      <Text style={styles.memberEmail}>{cm.user_profiles?.email || ''}</Text>
+                      <Text style={styles.memberName}>{cm.user_profile?.display_name || cm.user_profile_id.slice(0, 8)}</Text>
+                      <Text style={styles.memberEmail}>{cm.user_profile?.email || ''}</Text>
                     </View>
                     <TouchableOpacity onPress={() => handleRemoveMemberFromChat(cm.user_profile_id)} style={{ padding: 4 }}>
                       <Ionicons name="remove-circle-outline" size={20} color={colors.error ?? '#EF4444'} />
@@ -728,6 +768,69 @@ export default function AdminScreen() {
                 <Text style={styles.modalSaveText}>{savingDept ? 'Criando...' : 'Criar'}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══ Modal: Membros do Departamento ═══════════════════════════════════ */}
+      <Modal visible={showDeptMembers} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{selectedDept?.name} — Membros</Text>
+              <TouchableOpacity onPress={() => setShowDeptMembers(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingDeptMembers ? (
+              <Text style={styles.emptyText}>Carregando...</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                <Text style={styles.fieldLabel}>MEMBROS DO DEPARTAMENTO</Text>
+                {deptMembers.length === 0 && <Text style={styles.emptyText}>Nenhum membro</Text>}
+                {deptMembers.map((dm: any) => (
+                  <View key={dm.user_profile_id} style={styles.chatMemberRow}>
+                    <View style={styles.memberAvatar}>
+                      <Text style={styles.memberAvatarText}>
+                        {(dm.user_profile?.display_name || 'U').charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.memberName}>{dm.user_profile?.display_name || dm.user_profile_id?.slice(0, 8)}</Text>
+                      <Text style={styles.memberEmail}>{dm.user_profile?.email || ''}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleRemoveMemberFromDept(dm.user_profile_id)} style={{ padding: 4 }}>
+                      <Ionicons name="remove-circle-outline" size={20} color={colors.error ?? '#EF4444'} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {membersNotInDept.length > 0 && (
+                  <>
+                    <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>ADICIONAR MEMBRO</Text>
+                    {membersNotInDept.map(m => (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={styles.addMemberRow}
+                        onPress={() => handleAddMemberToDept(m.user_profile_id)}
+                      >
+                        <View style={[styles.memberAvatar, { backgroundColor: colors.surface }]}>
+                          <Text style={[styles.memberAvatarText, { color: colors.textMuted }]}>
+                            {(m.user_profiles?.display_name || 'U').charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.memberName}>{m.user_profiles?.display_name}</Text>
+                          <Text style={styles.memberEmail}>{m.user_profiles?.email}</Text>
+                        </View>
+                        <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>

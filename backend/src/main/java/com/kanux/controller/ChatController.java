@@ -267,6 +267,14 @@ public class ChatController {
         map.put("attachments", m.getAttachments()); map.put("created_at", m.getCreatedAt());
         map.put("updated_at", m.getUpdatedAt());
 
+        // Include user profile info for display
+        if (m.getUserProfileId() != null) {
+            userProfileRepository.findById(m.getUserProfileId()).ifPresent(up -> {
+                map.put("display_name", up.getDisplayName());
+                map.put("avatar_url", up.getAvatarUrl());
+            });
+        }
+
         return map;
     }
 

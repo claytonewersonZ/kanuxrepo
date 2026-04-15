@@ -320,6 +320,22 @@ export const api = {
     return apiRequest(`/api/departments?id=${id}`, { method: 'DELETE' });
   },
 
+  // Membros do Departamento
+  async getDeptMembers(departmentId: string) {
+    return apiRequest(`/api/departments/${departmentId}/members`);
+  },
+
+  async addDeptMember(departmentId: string, userProfileId: string) {
+    return apiRequest(`/api/departments/${departmentId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ user_profile_id: userProfileId }),
+    });
+  },
+
+  async removeDeptMember(departmentId: string, userProfileId: string) {
+    return apiRequest(`/api/departments/${departmentId}/members/${userProfileId}`, { method: 'DELETE' });
+  },
+
   // Admin - criar usuário com senha
   async adminCreateUser(data: { email: string; password: string; display_name: string; position?: string; company_id: string; role: string }) {
     return apiRequest('/api/admin/create-user', {

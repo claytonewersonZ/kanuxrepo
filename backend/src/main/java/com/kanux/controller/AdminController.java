@@ -6,6 +6,7 @@ import com.kanux.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import java.util.List;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -135,6 +136,7 @@ public class AdminController {
     }
 
     @PostMapping("/create-user")
+    @SuppressWarnings("UseSpecificCatch")
     public ResponseEntity<ApiResponse<Map<String, Object>>> createUser(
             @AuthenticationPrincipal UserProfile p, @RequestBody Map<String, String> body) {
         if (!isSuperAdmin(p)) return forbidden();
@@ -154,27 +156,52 @@ public class AdminController {
 
         try {
             // 1. Create auth user via Supabase Admin API
-            UUID authUserId = null;
-            if (!supabaseUrl.isBlank() && !serviceRoleKey.isBlank()) {
-                RestTemplate rest = new RestTemplate();
-                HttpHeaders headers = new HttpHeaders();
-                headers.set("apikey", serviceRoleKey);
-                headers.set("Authorization", "Bearer " + serviceRoleKey);
-                headers.setContentType(MediaType.APPLICATION_JSON);
+            if (supabaseUrl.isBlank() || serviceRoleKey.isBlank()) {
+                return ResponseEntity.badRequest().body(ApiResponse.fail(
+                        "Servidor não configurado para criar usuários (SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY ausentes)"));
+            }
 
-                Map<String, Object> authBody = new LinkedHashMap<>();
-                authBody.put("email", email);
-                authBody.put("password", password);
-                authBody.put("email_confirm", true);
-                authBody.put("user_metadata", Map.of("display_name", displayName));
+            UUID authUserId;
+            RestTemplate rest = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", serviceRoleKey);
+            headers.set("Authorization", "Bearer " + serviceRoleKey);
+            headers.setContentType(MediaType.APPLICATION_JSON);
 
-                HttpEntity<Map<String, Object>> request = new HttpEntity<>(authBody, headers);
+            // Check if user already exists in Supabase Auth — if so, reuse the id
+            try {
+                HttpEntity<Void> getEntity = new HttpEntity<>(headers);
                 @SuppressWarnings("unchecked")
-                Map<String, Object> authResponse = rest.postForObject(
-                        supabaseUrl + "/auth/v1/admin/users", request, Map.class);
-                if (authResponse != null && authResponse.get("id") != null) {
-                    authUserId = UUID.fromString(authResponse.get("id").toString());
+                Map<String, Object> existingCheck = rest.exchange(
+                        supabaseUrl + "/auth/v1/admin/users?page=1&per_page=50",
+                        HttpMethod.GET, getEntity, Map.class).getBody();
+                // Supabase returns { users: [...] }
+                List<?> users = existingCheck != null ? (List<?>) existingCheck.get("users") : null;
+                UUID foundId = null;
+                if (users != null) {
+                    for (Object u : users) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> usr = (Map<String, Object>) u;
+                        if (email.equalsIgnoreCase(String.valueOf(usr.get("email")))) {
+                            foundId = UUID.fromString(usr.get("id").toString());
+                            break;
+                        }
+                    }
                 }
+                if (foundId != null) {
+                    authUserId = foundId;
+                    // Update password for existing user
+                    Map<String, Object> updateBody = new LinkedHashMap<>();
+                    updateBody.put("password", password);
+                    updateBody.put("email_confirm", true);
+                    HttpEntity<Map<String, Object>> updateReq = new HttpEntity<>(updateBody, headers);
+                    rest.put(supabaseUrl + "/auth/v1/admin/users/" + authUserId, updateReq);
+                } else {
+                    authUserId = createSupabaseAuthUser(rest, headers, email, password, displayName);
+                }
+            } catch (Exception lookupEx) {
+                // If lookup fails, try direct creation
+                authUserId = createSupabaseAuthUser(rest, headers, email, password, displayName);
             }
 
             // 2. Create or find user profile
@@ -182,13 +209,13 @@ public class AdminController {
             Optional<UserProfile> existing = userProfileRepository.findByEmail(email);
             if (existing.isPresent()) {
                 profile = existing.get();
-                if (authUserId != null) {
-                    profile.setAuthUserId(authUserId);
-                    profile = userProfileRepository.save(profile);
-                }
+                profile.setAuthUserId(authUserId);
+                profile.setDisplayName(displayName);
+                if (position != null && !position.isBlank()) profile.setPosition(position);
+                profile = userProfileRepository.save(profile);
             } else {
                 profile = new UserProfile();
-                profile.setAuthUserId(authUserId != null ? authUserId : UUID.randomUUID());
+                profile.setAuthUserId(authUserId);
                 profile.setEmail(email);
                 profile.setDisplayName(displayName);
                 if (position != null && !position.isBlank()) profile.setPosition(position);
@@ -218,6 +245,23 @@ public class AdminController {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private UUID createSupabaseAuthUser(RestTemplate rest, HttpHeaders headers,
+                                         String email, String password, String displayName) {
+        Map<String, Object> authBody = new LinkedHashMap<>();
+        authBody.put("email", email);
+        authBody.put("password", password);
+        authBody.put("email_confirm", true);
+        authBody.put("user_metadata", Map.of("display_name", displayName));
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(authBody, headers);
+        Map<String, Object> authResponse = rest.postForObject(
+                supabaseUrl + "/auth/v1/admin/users", request, Map.class);
+        if (authResponse == null || authResponse.get("id") == null) {
+            throw new IllegalStateException("Supabase não retornou o ID do usuário criado");
+        }
+        return UUID.fromString(authResponse.get("id").toString());
+    }
 
     private boolean isSuperAdmin(UserProfile p) { return p != null && p.isSuperAdmin(); }
 

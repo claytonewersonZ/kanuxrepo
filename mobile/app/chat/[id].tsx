@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Alert, Image } from 'react-native';
 import { useEffect, useState, useRef } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -159,9 +159,13 @@ export default function ChatScreen() {
       <View style={styles.chatHeader}>
         <View style={styles.chatHeaderInfo}>
           <Text style={styles.chatHeaderName}>{chatInfo?.name || 'Chat'}</Text>
-          <Text style={styles.chatHeaderSub}>
-            {chatInfo?.is_private ? '🔒 Privado' : '# Público'} • {chatMembers.length} membros
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={[styles.onlineDot, remoteTyping.length > 0 ? styles.onlineDotActive : styles.onlineDotInactive]} />
+            <Text style={styles.chatHeaderSub}>
+              {chatInfo?.is_private ? '🔒 Privado' : '# Público'} • {chatMembers.length} membros
+              {remoteTyping.length > 0 ? ' • Online' : ''}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity style={styles.membersButton} onPress={openMembersModal}>
           <Ionicons name="people" size={22} color={colors.primary} />
@@ -178,24 +182,34 @@ export default function ChatScreen() {
         {messages.map((item, index) => {
           const isMyMessage = item.user_profile_id === user?.id;
           const senderName = item.display_name || item.user_display_name || chatMembers.find(m => m.user_profile_id === item.user_profile_id)?.user_profile?.display_name || 'Usuário';
+          const senderAvatar = item.avatar_url || chatMembers.find(m => m.user_profile_id === item.user_profile_id)?.user_profile?.avatar_url;
           // Show sender name if it's a different user's message and previous message was from a different sender
           const prevMsg = index > 0 ? messages[index - 1] : null;
           const showSender = !isMyMessage && (!prevMsg || prevMsg.user_profile_id !== item.user_profile_id);
           return (
-            <View 
-              key={item.id}
-              style={[styles.messageBubble, isMyMessage ? styles.myMessage : styles.otherMessage]}
-            >
-              {showSender && (
-                <Text style={styles.senderName}>{senderName}</Text>
+            <View key={item.id} style={[styles.messageRow, isMyMessage ? styles.myMessageRow : styles.otherMessageRow]}>
+              {!isMyMessage && showSender && (
+                senderAvatar ? (
+                  <Image source={{ uri: senderAvatar }} style={styles.msgAvatar} />
+                ) : (
+                  <View style={styles.msgAvatarPlaceholder}>
+                    <Text style={styles.msgAvatarText}>{(senderName || 'U').charAt(0).toUpperCase()}</Text>
+                  </View>
+                )
               )}
-              <Text style={styles.messageText}>{item.content}</Text>
-              <Text style={styles.messageTime}>
-                {new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-              {item.pending && (
-                <Text style={styles.pendingText}>Enviando...</Text>
-              )}
+              {!isMyMessage && !showSender && <View style={styles.msgAvatarSpacer} />}
+              <View style={[styles.messageBubble, isMyMessage ? styles.myMessage : styles.otherMessage]}>
+                {showSender && (
+                  <Text style={styles.senderName}>{senderName}</Text>
+                )}
+                <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>{item.content}</Text>
+                <Text style={styles.messageTime}>
+                  {new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                {item.pending && (
+                  <Text style={styles.pendingText}>Enviando...</Text>
+                )}
+              </View>
             </View>
           );
         })}
@@ -258,11 +272,15 @@ export default function ChatScreen() {
             )}
             {chatMembers.map(member => (
               <View key={member.id} style={styles.memberItem}>
-                <View style={styles.memberAvatar}>
-                  <Text style={styles.memberAvatarText}>
-                    {(member.user_profile?.display_name || 'U').charAt(0).toUpperCase()}
-                  </Text>
-                </View>
+                {member.user_profile?.avatar_url ? (
+                  <Image source={{ uri: member.user_profile.avatar_url }} style={styles.memberAvatarImg} />
+                ) : (
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.memberAvatarText}>
+                      {(member.user_profile?.display_name || 'U').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.memberInfo}>
                   <Text style={styles.memberName}>{member.user_profile?.display_name || 'Sem nome'}</Text>
                   <Text style={styles.memberEmail}>{member.user_profile?.email || ''}</Text>
@@ -280,26 +298,26 @@ export default function ChatScreen() {
             <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Adicionar Membro</Text>
             <ScrollView style={styles.addMemberList}>
               {companyMembers
-                .filter(m => !isMemberInChat(m.id))
+                .filter(m => !isMemberInChat(m.user_profile_id))
                 .map(member => (
                   <TouchableOpacity
                     key={member.id}
                     style={styles.memberItem}
-                    onPress={() => handleAddMember(member.id)}
+                    onPress={() => handleAddMember(member.user_profile_id)}
                   >
                     <View style={[styles.memberAvatar, { backgroundColor: colors.success }]}>
                       <Text style={styles.memberAvatarText}>
-                        {(member.display_name || 'U').charAt(0).toUpperCase()}
+                        {(member.user_profiles?.display_name || 'U').charAt(0).toUpperCase()}
                       </Text>
                     </View>
                     <View style={styles.memberInfo}>
-                      <Text style={styles.memberName}>{member.display_name || 'Sem nome'}</Text>
-                      <Text style={styles.memberEmail}>{member.email || ''}</Text>
+                      <Text style={styles.memberName}>{member.user_profiles?.display_name || 'Sem nome'}</Text>
+                      <Text style={styles.memberEmail}>{member.user_profiles?.email || ''}</Text>
                     </View>
                     <Ionicons name="add-circle" size={22} color={colors.success} />
                   </TouchableOpacity>
                 ))}
-              {companyMembers.filter(m => !isMemberInChat(m.id)).length === 0 && (
+              {companyMembers.filter(m => !isMemberInChat(m.user_profile_id)).length === 0 && (
                 <Text style={styles.emptyMembersText}>Todos os membros já estão no chat</Text>
               )}
             </ScrollView>
@@ -526,6 +544,60 @@ const styles = StyleSheet.create({
   },
   addMemberList: {
     maxHeight: 200,
+  },
+  // New styles for avatars, message rows, online dots
+  messageRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  myMessageRow: {
+    justifyContent: 'flex-end',
+  },
+  otherMessageRow: {
+    justifyContent: 'flex-start',
+  },
+  msgAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 6,
+  },
+  msgAvatarPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary + '40',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  msgAvatarText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  msgAvatarSpacer: {
+    width: 34,
+  },
+  myMessageText: {
+    color: '#fff',
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  onlineDotActive: {
+    backgroundColor: '#22C55E',
+  },
+  onlineDotInactive: {
+    backgroundColor: colors.textMuted,
+  },
+  memberAvatarImg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
 });
 
