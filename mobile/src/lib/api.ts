@@ -344,6 +344,22 @@ export const api = {
     });
   },
 
+  // Admin - editar usuário
+  async adminUpdateUser(profileId: string, data: {
+    display_name?: string; email?: string; position?: string; phone?: string;
+    password?: string; role?: string; company_id?: string; is_super_admin?: string;
+  }) {
+    return apiRequest(`/api/admin/users/${profileId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Admin - listar todos os usuários
+  async adminGetUsers() {
+    return apiRequest('/api/admin/users');
+  },
+
   // Admin - atualizar chat
   async updateChat(chatId: string, data: { name?: string; only_admins_send?: boolean }) {
     return apiRequest(`/api/chats/${chatId}`, {

@@ -45,5 +45,5 @@ public class CompanyMember {
         if (joinedAt == null) joinedAt = Instant.now();
     }
 
-    public enum MemberRole { MEMBER, MANAGER, ADMIN }
+    public enum MemberRole { MEMBER, MANAGER, ADMIN, SUPER_ADMIN }
 }

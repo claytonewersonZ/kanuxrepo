@@ -10,6 +10,7 @@ import java.util.UUID;
 
 public interface CompanyMemberRepository extends JpaRepository<CompanyMember, UUID> {
     List<CompanyMember> findByCompanyId(UUID companyId);
+    List<CompanyMember> findByUserProfileId(UUID userProfileId);
     Optional<CompanyMember> findByCompanyIdAndUserProfileId(UUID companyId, UUID userProfileId);
     boolean existsByCompanyIdAndUserProfileId(UUID companyId, UUID userProfileId);
 

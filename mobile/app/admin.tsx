@@ -16,7 +16,7 @@ interface Chat { id: string; name: string; is_private: boolean; only_admins_send
 interface Department { id: string; name: string; slug: string; }
 interface ChatMember { id?: string; user_profile_id: string; role: string; user_profile?: { display_name: string; email: string; }; }
 
-const ROLE_ORDER = ['MEMBER', 'MANAGER', 'ADMIN'];
+const ROLE_ORDER = ['MEMBER', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'];
 const ROLE_COLORS: Record<string, string> = {
   MEMBER: colors.textMuted,
   MANAGER: colors.info ?? '#3B82F6',
@@ -72,6 +72,18 @@ export default function AdminScreen() {
   const [deptMembers, setDeptMembers] = useState<any[]>([]);
   const [loadingDeptMembers, setLoadingDeptMembers] = useState(false);
 
+  // ── Edit User Modal ────────────────────────────────────────────────────────
+  const [showEditUser, setShowEditUser] = useState(false);
+  const [editUserId, setEditUserId] = useState('');
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserEmail, setEditUserEmail] = useState('');
+  const [editUserPosition, setEditUserPosition] = useState('');
+  const [editUserPhone, setEditUserPhone] = useState('');
+  const [editUserRole, setEditUserRole] = useState('MEMBER');
+  const [editUserPassword, setEditUserPassword] = useState('');
+  const [editUserIsSuperAdmin, setEditUserIsSuperAdmin] = useState(false);
+  const [savingEditUser, setSavingEditUser] = useState(false);
+
   useEffect(() => { checkSuperAdmin(); }, []);
   useEffect(() => { if (isSuperAdminUser) loadCompanies(); }, [isSuperAdminUser]);
   useEffect(() => { if (currentCompanyId) loadCompanyData(currentCompanyId); }, [currentCompanyId]);
@@ -79,10 +91,31 @@ export default function AdminScreen() {
   async function checkSuperAdmin() {
     try {
       const res = await api.getProfile();
-      if (res?.data?.is_super_admin) {
+      if (res?.data?.is_super_admin || res?.data?.superAdmin) {
         setIsSuperAdminUser(true);
       } else {
-        router.replace('/(tabs)');
+        // Also allow ADMIN role users in any company
+        try {
+          const companiesRes = await api.getAllCompanies();
+          if (companiesRes?.data?.length > 0) {
+            setIsSuperAdminUser(true); // If getAllCompanies returns data, they have admin API access
+          } else {
+            // Check membership role in user's companies
+            const userCompanies = await api.getCompanies();
+            const companyList = userCompanies?.data || [];
+            for (const c of companyList) {
+              const membersRes = await api.getCompanyMembers(c.id);
+              const me = (membersRes?.data || []).find((m: any) => m.user_profile_id === res?.data?.id);
+              if (me && ['ADMIN', 'SUPER_ADMIN'].includes(String(me.role))) {
+                setIsSuperAdminUser(true);
+                return;
+              }
+            }
+            router.replace('/(tabs)');
+          }
+        } catch {
+          router.replace('/(tabs)');
+        }
       }
     } catch {
       router.replace('/(auth)/login');
@@ -167,6 +200,45 @@ export default function AdminScreen() {
   function resetUserForm() {
     setNewUserName(''); setNewUserEmail(''); setNewUserPassword('');
     setNewUserPosition(''); setNewUserRole('MEMBER');
+  }
+
+  function openEditUser(member: Member) {
+    setEditUserId(member.user_profile_id);
+    setEditUserName(member.user_profiles?.display_name || '');
+    setEditUserEmail(member.user_profiles?.email || '');
+    setEditUserPosition(member.user_profiles?.position || '');
+    setEditUserPhone('');
+    setEditUserRole(member.role);
+    setEditUserPassword('');
+    setEditUserIsSuperAdmin(member.role === 'SUPER_ADMIN');
+    setShowEditUser(true);
+  }
+
+  async function handleSaveEditUser() {
+    if (!editUserName.trim()) {
+      Alert.alert('Erro', 'Nome é obrigatório'); return;
+    }
+    if (editUserPassword && editUserPassword.length < 6) {
+      Alert.alert('Erro', 'Senha deve ter no mínimo 6 caracteres'); return;
+    }
+    setSavingEditUser(true);
+    try {
+      await api.adminUpdateUser(editUserId, {
+        display_name: editUserName.trim(),
+        email: editUserEmail.trim(),
+        position: editUserPosition.trim() || undefined,
+        phone: editUserPhone.trim() || undefined,
+        password: editUserPassword || undefined,
+        role: editUserRole,
+        company_id: currentCompanyId,
+        is_super_admin: editUserRole === 'SUPER_ADMIN' ? 'true' : 'false',
+      });
+      Alert.alert('Sucesso', 'Usuário atualizado');
+      setShowEditUser(false);
+      loadCompanyData(currentCompanyId);
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Falha ao atualizar usuário');
+    } finally { setSavingEditUser(false); }
   }
 
   // ── Chats ──────────────────────────────────────────────────────────────────
@@ -404,7 +476,7 @@ export default function AdminScreen() {
             </View>
 
             {members.map(member => (
-              <View key={member.id} style={styles.memberItem}>
+              <TouchableOpacity key={member.id} style={styles.memberItem} onPress={() => openEditUser(member)}>
                 <View style={[styles.memberAvatar, { backgroundColor: ROLE_COLORS[member.role] + '40' }]}>
                   <Text style={[styles.memberAvatarText, { color: ROLE_COLORS[member.role] }]}>
                     {(member.user_profiles?.display_name || 'U').charAt(0).toUpperCase()}
@@ -417,20 +489,13 @@ export default function AdminScreen() {
                     <Text style={styles.memberPosition}>{member.user_profiles.position}</Text>
                   )}
                 </View>
-                <TouchableOpacity
-                  style={[styles.roleChip, { backgroundColor: ROLE_COLORS[member.role] + '20' }]}
-                  onPress={() => {
-                    const idx = ROLE_ORDER.indexOf(member.role);
-                    const next = ROLE_ORDER[(idx + 1) % ROLE_ORDER.length];
-                    handleUpdateRole(member.id, next);
-                  }}
-                >
+                <View style={[styles.roleChip, { backgroundColor: ROLE_COLORS[member.role] + '20' }]}>
                   <Text style={[styles.roleText, { color: ROLE_COLORS[member.role] }]}>{member.role}</Text>
-                </TouchableOpacity>
+                </View>
                 <TouchableOpacity onPress={() => handleRemoveMember(member.id)} style={{ padding: 4 }}>
                   <Ionicons name="trash-outline" size={18} color={colors.error ?? '#EF4444'} />
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             ))}
             {members.length === 0 && <Text style={styles.emptyText}>Nenhum membro nesta empresa</Text>}
           </View>
@@ -598,7 +663,7 @@ export default function AdminScreen() {
                   onPress={() => setNewUserRole(role)}
                 >
                   <Text style={[styles.roleSelectorText, newUserRole === role && { color: ROLE_COLORS[role], fontWeight: '700' }]}>
-                    {role}
+                    {role === 'SUPER_ADMIN' ? 'SUPER' : role}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -832,6 +897,67 @@ export default function AdminScreen() {
               </ScrollView>
             )}
           </View>
+        </View>
+      </Modal>
+
+      {/* ══ Modal: Editar Usuário ═════════════════════════════════════════════ */}
+      <Modal visible={showEditUser} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Editar Usuário</Text>
+              <TouchableOpacity onPress={() => setShowEditUser(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.fieldLabel}>NOME COMPLETO *</Text>
+            <TextInput style={styles.modalInput} placeholder="Nome" placeholderTextColor={colors.textMuted}
+              value={editUserName} onChangeText={setEditUserName} />
+
+            <Text style={styles.fieldLabel}>EMAIL</Text>
+            <TextInput style={styles.modalInput} placeholder="email@exemplo.com" placeholderTextColor={colors.textMuted}
+              value={editUserEmail} onChangeText={setEditUserEmail} keyboardType="email-address" autoCapitalize="none" />
+
+            <Text style={styles.fieldLabel}>CARGO</Text>
+            <TextInput style={styles.modalInput} placeholder="Ex: Analista" placeholderTextColor={colors.textMuted}
+              value={editUserPosition} onChangeText={setEditUserPosition} />
+
+            <Text style={styles.fieldLabel}>TELEFONE</Text>
+            <TextInput style={styles.modalInput} placeholder="(00) 00000-0000" placeholderTextColor={colors.textMuted}
+              value={editUserPhone} onChangeText={setEditUserPhone} keyboardType="phone-pad" />
+
+            <Text style={styles.fieldLabel}>NOVA SENHA (deixe vazio para manter)</Text>
+            <TextInput style={styles.modalInput} placeholder="Mín. 6 caracteres" placeholderTextColor={colors.textMuted}
+              value={editUserPassword} onChangeText={setEditUserPassword} secureTextEntry />
+
+            <Text style={styles.fieldLabel}>FUNÇÃO NA EMPRESA</Text>
+            <View style={styles.roleSelector}>
+              {ROLE_ORDER.map(role => (
+                <TouchableOpacity
+                  key={role}
+                  style={[styles.roleSelectorItem, editUserRole === role && { ...styles.roleSelectorItemActive, borderColor: ROLE_COLORS[role] }]}
+                  onPress={() => setEditUserRole(role)}
+                >
+                  <Text style={[styles.roleSelectorText, editUserRole === role && { color: ROLE_COLORS[role], fontWeight: '700' }]}>
+                    {role === 'SUPER_ADMIN' ? 'SUPER' : role}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowEditUser(false)}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, savingEditUser && { opacity: 0.5 }]}
+                onPress={handleSaveEditUser} disabled={savingEditUser}
+              >
+                <Text style={styles.modalSaveText}>{savingEditUser ? 'Salvando...' : 'Salvar'}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
     </View>

@@ -89,6 +89,14 @@ public class ChatController {
         chat.setOnlyAdminsSend(req.isOnlyAdminsSend());
         chat.setCreatedBy(p.getId());
         Chat savedChat = chatRepository.save(chat);
+
+        // Auto-add creator as ADMIN member of the chat
+        ChatMember creatorMember = new ChatMember();
+        creatorMember.setChatId(savedChat.getId());
+        creatorMember.setUserProfileId(p.getId());
+        creatorMember.setRole("ADMIN");
+        chatMemberRepository.save(creatorMember);
+
         return ResponseEntity.ok(ApiResponse.ok(savedChat));
     }
 

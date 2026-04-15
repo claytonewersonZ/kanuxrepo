@@ -47,7 +47,7 @@ export type CompanyMember = {
   id: string;
   company_id: string;
   user_profile_id: string;
-  role: 'MEMBER' | 'MANAGER' | 'ADMIN';
+  role: 'MEMBER' | 'MANAGER' | 'ADMIN' | 'SUPER_ADMIN';
   joined_at: string;
 };
 

@@ -4,7 +4,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { getUserCompanies, getCompanyTickets, Company, Ticket } from '../../src/lib/supabase';
-import { getUserCompany, saveUserCompany } from '../../src/lib/offlineStorage';
+import { saveUserCompany, getUserCompany } from '../../src/lib/offlineStorage';
+import { api } from '../../src/lib/api';
 import { colors, spacing, borderRadius } from '../../src/theme';
 import KanuxLogo from '../../src/components/KanuxLogo';
 
@@ -17,6 +18,7 @@ export default function HomeScreen() {
   const [recentTickets, setRecentTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isAdminOrAbove, setIsAdminOrAbove] = useState(false);
 
   const isSuperAdmin = profile?.is_super_admin === true;
 
@@ -43,6 +45,19 @@ export default function HomeScreen() {
         if (!valid) await saveUserCompany(active.id);
         const ticketsData = await getCompanyTickets(active.id);
         setRecentTickets(ticketsData.slice(0, 5));
+
+        // Check if user is ADMIN or SUPER_ADMIN in any company
+        if (!isSuperAdmin) {
+          try {
+            const membersRes = await api.getCompanyMembers(active.id);
+            const myMem = (membersRes?.data || []).find((m: any) => m.user_profile_id === profile?.id);
+            if (myMem && ['ADMIN', 'SUPER_ADMIN'].includes(String(myMem.role))) {
+              setIsAdminOrAbove(true);
+            }
+          } catch { /* ignore */ }
+        } else {
+          setIsAdminOrAbove(true);
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -176,7 +191,7 @@ export default function HomeScreen() {
               <Text style={styles.channelText}>Meus Tickets</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
-            {isSuperAdmin && (
+            {(isSuperAdmin || isAdminOrAbove) && (
               <TouchableOpacity style={styles.channelItem} onPress={() => router.push('/admin')}>
                 <Ionicons name="shield-checkmark" size={20} color={colors.error} />
                 <Text style={styles.channelText}>Painel Admin</Text>

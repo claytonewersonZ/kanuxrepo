@@ -118,7 +118,7 @@ export default function ChatScreen() {
         const t = await getChatTyping(id as string);
         if (!mounted) return;
         const names = (t || [])
-          .filter((u: any) => u.user_profile_id !== user?.id)
+          .filter((u: any) => u.user_profile_id !== profile?.id)
           .map((u: any) => u.display_name || 'Alguém');
         setRemoteTyping(names);
       } catch (e) {
@@ -180,7 +180,7 @@ export default function ChatScreen() {
           </View>
         )}
         {messages.map((item, index) => {
-          const isMyMessage = item.user_profile_id === user?.id;
+          const isMyMessage = item.user_profile_id === profile?.id;
           const senderName = item.display_name || item.user_display_name || chatMembers.find(m => m.user_profile_id === item.user_profile_id)?.user_profile?.display_name || 'Usuário';
           const senderAvatar = item.avatar_url || chatMembers.find(m => m.user_profile_id === item.user_profile_id)?.user_profile?.avatar_url;
           // Show sender name if it's a different user's message and previous message was from a different sender

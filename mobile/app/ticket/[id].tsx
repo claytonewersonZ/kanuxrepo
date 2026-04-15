@@ -8,7 +8,7 @@ import { colors, spacing } from '../../src/theme';
 
 export default function TicketScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<any[]>([]);
@@ -201,7 +201,7 @@ export default function TicketScreen() {
               </View>
             )}
             {comments.map((comment) => {
-              const isMyMessage = comment.user_profile_id === user?.id;
+              const isMyMessage = comment.user_profile_id === profile?.id;
               return (
                 <View key={comment.id} style={[styles.messageRow, isMyMessage && styles.messageRowMine]}>
                   {!isMyMessage && (
