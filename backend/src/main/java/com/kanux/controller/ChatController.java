@@ -137,8 +137,10 @@ public class ChatController {
             @AuthenticationPrincipal UserProfile p, @PathVariable String chatId,
             @RequestBody SendMessageRequest req) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
-        if (req.getContent() == null || req.getContent().isBlank())
-            return ResponseEntity.badRequest().body(ApiResponse.fail("content é obrigatório"));
+        // conteúdo obrigatório apenas para mensagens de texto; mídia pode ter content vazio
+        boolean isTextMessage = req.getMessageType() == null || "text".equals(req.getMessageType());
+        if (isTextMessage && (req.getContent() == null || req.getContent().isBlank()))
+            return ResponseEntity.badRequest().body(ApiResponse.fail("content é obrigatório para mensagens de texto"));
         UUID senderId = p.getId();
         if (req.getUserProfileId() != null) {
             try { senderId = UUID.fromString(req.getUserProfileId()); } catch (Exception ignored) {}
@@ -146,7 +148,10 @@ public class ChatController {
         Message message = new Message();
         message.setChatId(UUID.fromString(chatId));
         message.setUserProfileId(senderId);
-        message.setContent(req.getContent());
+        message.setContent(req.getContent() != null ? req.getContent() : "");
+        message.setMessageType(req.getMessageType() != null ? req.getMessageType() : "text");
+        if (req.getMediaUrl() != null) message.setMediaUrl(req.getMediaUrl());
+        if (req.getMediaName() != null) message.setMediaName(req.getMediaName());
         message.setAttachments("[]");
         Message saved = messageRepository.save(message);
         return ResponseEntity.ok(ApiResponse.ok(toMap(saved)));
@@ -274,6 +279,9 @@ public class ChatController {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", m.getId()); map.put("chat_id", m.getChatId());
         map.put("user_profile_id", m.getUserProfileId()); map.put("content", m.getContent());
+        map.put("message_type", m.getMessageType() != null ? m.getMessageType() : "text");
+        map.put("media_url", m.getMediaUrl());
+        map.put("media_name", m.getMediaName());
         map.put("attachments", m.getAttachments()); map.put("created_at", m.getCreatedAt());
         map.put("updated_at", m.getUpdatedAt());
 

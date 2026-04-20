@@ -1,12 +1,15 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Alert, Image } from 'react-native';
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Alert, Image, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { colors, spacing } from '../../src/theme';
 import { useOfflineMessages } from '../../src/contexts/SyncContext';
-import { getChatTyping, setChatTyping, getChatMembersForChat, addMemberToChat, removeMemberFromChat, getCompanyMembers, ChatMember, Chat } from '../../src/lib/supabase';
+import { supabase, getChatTyping, setChatTyping, getChatMembersForChat, addMemberToChat, removeMemberFromChat, getCompanyMembers, ChatMember, Chat } from '../../src/lib/supabase';
 import { api } from '../../src/lib/api';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { Audio } from 'expo-av';
 
 // ── Auxiliares de separador de data ─────────────────────────────────────────
 function getDateLabel(dateStr: string): string {
@@ -52,6 +55,10 @@ export default function ChatScreen() {
   const typingTimer = useRef<any>(null);
   const listRef = useRef<FlatList>(null);
 
+  // Áudio
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+
   // Membros do chat
   const [chatMembers, setChatMembers] = useState<ChatMember[]>([]);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -60,6 +67,20 @@ export default function ChatScreen() {
   const [loadingMembers, setLoadingMembers] = useState(false);
 
   const { messages, loading, sendMessage, refresh } = useOfflineMessages(id as string);
+
+  // Realtime: assina novas mensagens via Supabase para atualização ao vivo
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel(`chat-messages-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${id}` },
+        () => { refresh(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id]);
 
   // Carregar info do chat e membros
   useEffect(() => {
@@ -185,8 +206,101 @@ export default function ChatScreen() {
     }
   }
 
+  // ── Funções de Mídia ─────────────────────────────────────────────────────
+
+  async function uploadToSupabase(uri: string, fileName: string, mimeType: string): Promise<string | null> {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const filePath = `${id}/${Date.now()}_${fileName}`;
+      const { data, error } = await supabase.storage
+        .from('chat-media')
+        .upload(filePath, blob, { contentType: mimeType, upsert: false });
+      if (error) { console.error('Upload error:', error); return null; }
+      const { data: urlData } = supabase.storage.from('chat-media').getPublicUrl(filePath);
+      return urlData?.publicUrl ?? null;
+    } catch (e) {
+      console.error('uploadToSupabase error:', e);
+      return null;
+    }
+  }
+
+  async function handlePickPhoto() {
+    if (!id || sending) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permissão necessária', 'Habilite o acesso à galeria nas configurações.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsMultipleSelection: false,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setSending(true);
+    try {
+      const fileName = asset.fileName || `photo_${Date.now()}.jpg`;
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const url = await uploadToSupabase(asset.uri, fileName, mimeType);
+      if (!url) { Alert.alert('Erro', 'Falha ao enviar a foto.'); return; }
+      await sendMessage('', { messageType: 'image', mediaUrl: url, mediaName: fileName });
+    } finally { setSending(false); }
+  }
+
+  async function handlePickDocument() {
+    if (!id || sending) return;
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    setSending(true);
+    try {
+      const mimeType = asset.mimeType || 'application/octet-stream';
+      const url = await uploadToSupabase(asset.uri, asset.name, mimeType);
+      if (!url) { Alert.alert('Erro', 'Falha ao enviar o arquivo.'); return; }
+      await sendMessage('', { messageType: 'document', mediaUrl: url, mediaName: asset.name });
+    } finally { setSending(false); }
+  }
+
+  async function handleStartRecording() {
+    try {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) { Alert.alert('Permissão necessária', 'Habilite o acesso ao microfone.'); return; }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording: rec } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      setRecording(rec);
+      setIsRecording(true);
+    } catch (e) { console.error('Erro ao iniciar gravação:', e); }
+  }
+
+  async function handleStopRecording() {
+    if (!recording || !id) return;
+    setIsRecording(false);
+    setSending(true);
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      const uri = recording.getURI();
+      setRecording(null);
+      if (!uri) return;
+      const fileName = `audio_${Date.now()}.m4a`;
+      const url = await uploadToSupabase(uri, fileName, 'audio/m4a');
+      if (!url) { Alert.alert('Erro', 'Falha ao enviar o áudio.'); return; }
+      await sendMessage('', { messageType: 'audio', mediaUrl: url, mediaName: fileName });
+    } finally { setSending(false); }
+  }
+
+  // Garantir ordenação ASC antes de buildListItems (defesa contra dados desordenados)
+  const sortedMessages = useMemo(
+    () => [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [messages]
+  );
+
   // Itens da lista memoizados para evitar recálculo a cada render
-  const listItems = useMemo(() => buildListItems(messages, profile?.id), [messages, profile?.id]);
+  const listItems = useMemo(() => buildListItems(sortedMessages, profile?.id), [sortedMessages, profile?.id]);
 
   return (
     <KeyboardAvoidingView
@@ -251,8 +365,26 @@ export default function ChatScreen() {
                 {showSender && (
                   <Text style={styles.senderName}>{senderName}</Text>
                 )}
-                <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>{item.content}</Text>
-                <Text style={styles.messageTime}>
+                {/* Renderização por tipo de mídia */}
+                {item.message_type === 'image' && item.media_url ? (
+                  <Image
+                    source={{ uri: item.media_url }}
+                    style={styles.mediaImage}
+                    resizeMode="cover"
+                  />
+                ) : item.message_type === 'audio' && item.media_url ? (
+                  <AudioPlayer url={item.media_url} isMyMessage={isMyMessage} />
+                ) : item.message_type === 'document' && item.media_url ? (
+                  <TouchableOpacity style={styles.documentRow} onPress={() => Alert.alert('Arquivo', item.media_name || 'documento', [{ text: 'OK' }])}>
+                    <Ionicons name="document-attach" size={22} color={isMyMessage ? '#fff' : colors.primary} />
+                    <Text style={[styles.documentName, isMyMessage && styles.myMessageText]} numberOfLines={1}>
+                      {item.media_name || 'Documento'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>{item.content}</Text>
+                )}
+                <Text style={[styles.messageTime, isMyMessage && styles.myMessageTime]}>
                   {new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </Text>
                 {item.pending && (
@@ -282,6 +414,21 @@ export default function ChatScreen() {
       <View style={styles.inputContainer}>
         {canSendMessage ? (
           <>
+            {/* Botões de mídia */}
+            <TouchableOpacity style={styles.mediaButton} onPress={handlePickPhoto} disabled={sending}>
+              <Ionicons name="image-outline" size={22} color={sending ? colors.textMuted : colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.mediaButton} onPress={handlePickDocument} disabled={sending}>
+              <Ionicons name="attach-outline" size={22} color={sending ? colors.textMuted : colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.mediaButton, isRecording && styles.mediaButtonRecording]}
+              onPressIn={handleStartRecording}
+              onPressOut={handleStopRecording}
+              disabled={sending && !isRecording}
+            >
+              <Ionicons name={isRecording ? 'stop-circle' : 'mic-outline'} size={22} color={isRecording ? colors.error : (sending ? colors.textMuted : colors.primary)} />
+            </TouchableOpacity>
             <TextInput
               style={styles.input}
               placeholder="Digite sua mensagem..."
@@ -297,13 +444,17 @@ export default function ChatScreen() {
               multiline
               maxLength={1000}
             />
-            <TouchableOpacity
-              style={[styles.sendButton, (!newMessage.trim() || sending) && styles.sendButtonDisabled]}
-              onPress={handleSend}
-              disabled={!newMessage.trim() || sending}
-            >
-              <Text style={styles.sendButtonText}>Enviar</Text>
-            </TouchableOpacity>
+            {sending ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: spacing.sm }} />
+            ) : (
+              <TouchableOpacity
+                style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
+                onPress={handleSend}
+                disabled={!newMessage.trim()}
+              >
+                <Ionicons name="send" size={18} color="#fff" />
+              </TouchableOpacity>
+            )}
           </>
         ) : (
           <View style={styles.blockedInput}>
@@ -386,6 +537,51 @@ export default function ChatScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+// ── Componente AudioPlayer inline ────────────────────────────────────────
+function AudioPlayer({ url, isMyMessage }: { url: string; isMyMessage: boolean }) {
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  async function togglePlay() {
+    if (!playing) {
+      if (sound) {
+        await sound.replayAsync();
+      } else {
+        const { sound: s } = await Audio.Sound.createAsync(
+          { uri: url },
+          { shouldPlay: true }
+        );
+        s.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) { setPlaying(false); }
+        });
+        setSound(s);
+      }
+      setPlaying(true);
+    } else {
+      if (sound) await sound.pauseAsync();
+      setPlaying(false);
+    }
+  }
+
+  useEffect(() => {
+    return () => { sound?.unloadAsync(); };
+  }, [sound]);
+
+  return (
+    <TouchableOpacity style={audioStyles.row} onPress={togglePlay}>
+      <Ionicons name={playing ? 'pause-circle' : 'play-circle'} size={32} color={isMyMessage ? '#fff' : colors.primary} />
+      <Text style={[audioStyles.label, isMyMessage && { color: '#fff' }]}>
+        {playing ? 'Pausar' : 'Áudio'}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+const audioStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  label: { color: colors.textSecondary, fontSize: 14 },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -486,20 +682,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     maxHeight: 100,
-  },
-  sendButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginLeft: spacing.sm,
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendButtonText: {
-    color: colors.text,
-    fontWeight: '600',
   },
   blockedInput: {
     flex: 1,
@@ -678,6 +860,50 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+  },
+  // ── Estilos de mídia ──
+  mediaImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  documentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    maxWidth: 200,
+  },
+  documentName: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    flex: 1,
+  },
+  myMessageTime: {
+    color: 'rgba(255,255,255,0.7)',
+  },
+  // ── Botões de mídia na área de input ──
+  mediaButton: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaButtonRecording: {
+    backgroundColor: colors.error + '22',
+    borderRadius: 20,
+  },
+  sendButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.xs,
+  },
+  sendButtonDisabled: {
+    opacity: 0.4,
   },
 });
 

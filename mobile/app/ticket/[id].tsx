@@ -1,10 +1,20 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { useEffect, useState, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { Ticket, TicketComment, getTicketComments, addTicketComment, updateTicketStatus, getUserProfile } from '../../src/lib/supabase';
+import { Ticket, TicketComment, getTicketComments, addTicketComment, updateTicketStatus, getUserProfile, supabase } from '../../src/lib/supabase';
 import { api } from '../../src/lib/api';
 import { colors, spacing } from '../../src/theme';
+import * as ImagePicker from 'expo-image-picker';
+
+const TICKET_IMAGE_PREFIX = '[image]:';
+
+function getImageUrlFromComment(content?: string): string | null {
+  if (!content) return null;
+  if (!content.startsWith(TICKET_IMAGE_PREFIX)) return null;
+  const url = content.replace(TICKET_IMAGE_PREFIX, '').trim();
+  return url || null;
+}
 
 export default function TicketScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -58,6 +68,65 @@ export default function TicketScreen() {
       }
     } catch (error) {
       console.error('Error adding comment:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function uploadTicketPhoto(uri: string, fileName: string, mimeType: string): Promise<string | null> {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const filePath = `tickets/${id}/${Date.now()}_${fileName}`;
+      const { error } = await supabase.storage
+        .from('chat-media')
+        .upload(filePath, blob, { contentType: mimeType, upsert: false });
+      if (error) {
+        console.error('Erro no upload da foto do ticket:', error);
+        return null;
+      }
+      const { data } = supabase.storage.from('chat-media').getPublicUrl(filePath);
+      return data?.publicUrl ?? null;
+    } catch (error) {
+      console.error('Erro ao enviar foto do ticket:', error);
+      return null;
+    }
+  }
+
+  async function handlePickPhoto() {
+    if (!id || submitting) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permissão necessária', 'Habilite o acesso à galeria para enviar fotos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsMultipleSelection: false,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    setSubmitting(true);
+    try {
+      const fileName = asset.fileName || `ticket_photo_${Date.now()}.jpg`;
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const url = await uploadTicketPhoto(asset.uri, fileName, mimeType);
+      if (!url) {
+        Alert.alert('Erro', 'Falha ao enviar foto.');
+        return;
+      }
+
+      const comment = await addTicketComment(id, `${TICKET_IMAGE_PREFIX}${url}`);
+      if (comment) {
+        setComments(prev => [...prev, comment]);
+      }
+    } catch (error) {
+      console.error('Erro ao adicionar foto no ticket:', error);
     } finally {
       setSubmitting(false);
     }
@@ -199,6 +268,7 @@ export default function TicketScreen() {
             )}
             {comments.map((comment) => {
               const isMyMessage = comment.user_profile_id === profile?.id;
+              const imageUrl = getImageUrlFromComment(comment.content);
               return (
                 <View key={comment.id} style={[styles.messageRow, isMyMessage && styles.messageRowMine]}>
                   {!isMyMessage && (
@@ -210,7 +280,11 @@ export default function TicketScreen() {
                     {!isMyMessage && (
                       <Text style={styles.authorName}>{getAuthorName(comment)}</Text>
                     )}
-                    <Text style={styles.messageText}>{comment.content}</Text>
+                    {imageUrl ? (
+                      <Image source={{ uri: imageUrl }} style={styles.commentImage} resizeMode="cover" />
+                    ) : (
+                      <Text style={styles.messageText}>{comment.content}</Text>
+                    )}
                     <Text style={styles.messageTime}>
                       {new Date(comment.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </Text>
@@ -222,6 +296,9 @@ export default function TicketScreen() {
 
           {/* Input de Mensagem */}
           <View style={styles.inputContainer}>
+            <TouchableOpacity style={styles.mediaButton} onPress={handlePickPhoto} disabled={submitting}>
+              <Text style={styles.mediaButtonText}>📷</Text>
+            </TouchableOpacity>
             <TextInput
               style={styles.input}
               placeholder="Digite sua mensagem..."
@@ -236,7 +313,11 @@ export default function TicketScreen() {
               onPress={handleAddComment}
               disabled={!newComment.trim() || submitting}
             >
-              <Text style={styles.sendButtonText}>Enviar</Text>
+              {submitting ? (
+                <ActivityIndicator size="small" color={colors.text} />
+              ) : (
+                <Text style={styles.sendButtonText}>Enviar</Text>
+              )}
             </TouchableOpacity>
           </View>
         </>
@@ -443,6 +524,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
   },
+  commentImage: {
+    width: 220,
+    height: 220,
+    borderRadius: 10,
+    backgroundColor: colors.background,
+  },
   messageTime: {
     color: colors.textMuted,
     fontSize: 10,
@@ -467,6 +554,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     maxHeight: 100,
+  },
+  mediaButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.xs,
+  },
+  mediaButtonText: {
+    fontSize: 18,
   },
   sendButton: {
     backgroundColor: colors.primary,

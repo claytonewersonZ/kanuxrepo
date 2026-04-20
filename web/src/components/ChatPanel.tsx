@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import apiClient from "@/lib/apiClient";
 
 interface Message {
@@ -134,7 +134,12 @@ export default function ChatPanel({ chatId, onClose }: { chatId: string | null; 
     return null;
   }
 
-  const messageGroups = groupMessagesByDate(messages);
+  const sortedMessages = useMemo(
+    () => [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [messages]
+  );
+
+  const messageGroups = groupMessagesByDate(sortedMessages);
 
   return (
     <div className="flex h-full">

@@ -29,6 +29,15 @@ public class Message {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "message_type", columnDefinition = "VARCHAR(20)")
+    private String messageType = "text";
+
+    @Column(name = "media_url", columnDefinition = "TEXT")
+    private String mediaUrl;
+
+    @Column(name = "media_name", columnDefinition = "TEXT")
+    private String mediaName;
+
     @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private String attachments = "[]";

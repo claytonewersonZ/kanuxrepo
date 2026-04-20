@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { SyncProvider } from '../src/contexts/SyncContext';
+import { useNotifications } from '../src/contexts/NotificationContext';
 import { colors } from '../src/theme';
 import { ActivityIndicator, View, Text, Image } from 'react-native';
 
@@ -51,10 +52,17 @@ function AuthGate() {
   return null;
 }
 
+/** Componente que ativa o hook de notificações dentro dos providers de auth */
+function NotificationSetup() {
+  useNotifications();
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <AuthProvider>
       <SyncProvider>
+        <NotificationSetup />
         <StatusBar style="dark" />
         <AuthGate />
         <Stack
