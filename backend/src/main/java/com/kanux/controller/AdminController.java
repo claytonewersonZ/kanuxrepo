@@ -1,5 +1,7 @@
 package com.kanux.controller;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,7 +10,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -27,18 +32,20 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.kanux.dto.AddMemberRequest;
 import com.kanux.dto.ApiResponse;
 import com.kanux.dto.InviteUserRequest;
 import com.kanux.dto.UpdateMemberRequest;
+import com.kanux.entity.Chat;
 import com.kanux.entity.Company;
 import com.kanux.entity.CompanyMember;
+import com.kanux.entity.Ticket;
 import com.kanux.entity.UserProfile;
+import com.kanux.repository.ChatRepository;
 import com.kanux.repository.CompanyMemberRepository;
 import com.kanux.repository.CompanyRepository;
+import com.kanux.repository.MessageRepository;
+import com.kanux.repository.TicketRepository;
 import com.kanux.repository.UserProfileRepository;
 
 @RestController
@@ -56,11 +63,19 @@ public class AdminController {
     private final CompanyRepository companyRepository;
     private final CompanyMemberRepository memberRepository;
     private final UserProfileRepository userProfileRepository;
+    private final ChatRepository chatRepository;
+    private final MessageRepository messageRepository;
+    private final TicketRepository ticketRepository;
 
-    public AdminController(CompanyRepository companyRepository, CompanyMemberRepository memberRepository, UserProfileRepository userProfileRepository) {
+    public AdminController(CompanyRepository companyRepository, CompanyMemberRepository memberRepository,
+            UserProfileRepository userProfileRepository, ChatRepository chatRepository,
+            MessageRepository messageRepository, TicketRepository ticketRepository) {
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.userProfileRepository = userProfileRepository;
+        this.chatRepository = chatRepository;
+        this.messageRepository = messageRepository;
+        this.ticketRepository = ticketRepository;
     }
 
     @GetMapping("/companies")
@@ -383,6 +398,125 @@ public class AdminController {
         }).orElse(ResponseEntity.notFound().build());
     }
 
+    // ── Dashboard / Activity Logs ────────────────────────────────────────────
+    @GetMapping("/dashboard")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDashboard(
+            @AuthenticationPrincipal UserProfile p,
+            @RequestParam String companyId) {
+        if (!isAdminOrAbove(p)) return forbidden();
+
+        UUID cId = UUID.fromString(companyId);
+
+        // Verify user has access to this company
+        if (!p.isSuperAdmin()) {
+            boolean hasAccess = memberRepository.findByUserProfileId(p.getId()).stream()
+                    .anyMatch(m -> m.getCompanyId().equals(cId)
+                            && (m.getRole() == CompanyMember.MemberRole.ADMIN
+                                || m.getRole() == CompanyMember.MemberRole.SUPER_ADMIN));
+            if (!hasAccess) return forbidden();
+        }
+
+        Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
+        Instant sevenDaysAgo = Instant.now().minus(7, ChronoUnit.DAYS);
+
+        // Company stats
+        List<Chat> chats = chatRepository.findByCompanyIdOrderByCreatedAtDesc(cId);
+        List<UUID> chatIds = chats.stream().map(Chat::getId).collect(Collectors.toList());
+        List<Ticket> tickets = ticketRepository.findByCompanyIdOrderByCreatedAtDesc(cId);
+        List<CompanyMember> members = memberRepository.findByCompanyIdWithProfile(cId);
+
+        long totalMessages = chatIds.isEmpty() ? 0 : messageRepository.countByChatIdIn(chatIds);
+        long messagesLast30 = chatIds.isEmpty() ? 0 : messageRepository.countByChatIdInAndCreatedAtAfter(chatIds, thirtyDaysAgo);
+        long messagesLast7 = chatIds.isEmpty() ? 0 : messageRepository.countByChatIdInAndCreatedAtAfter(chatIds, sevenDaysAgo);
+        long ticketsOpen = tickets.stream().filter(t -> t.getStatus() != null && t.getStatus().name().equals("OPEN")).count();
+        long ticketsPending = tickets.stream().filter(t -> t.getStatus() != null && t.getStatus().name().equals("PENDING")).count();
+        long ticketsResolved = tickets.stream().filter(t -> t.getStatus() != null && (t.getStatus().name().equals("RESOLVED") || t.getStatus().name().equals("CLOSED"))).count();
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("total_chats", chats.size());
+        stats.put("total_messages", totalMessages);
+        stats.put("messages_last_30_days", messagesLast30);
+        stats.put("messages_last_7_days", messagesLast7);
+        stats.put("total_tickets", tickets.size());
+        stats.put("tickets_open", ticketsOpen);
+        stats.put("tickets_pending", ticketsPending);
+        stats.put("tickets_resolved", ticketsResolved);
+        stats.put("total_members", members.size());
+
+        // Recent activity log (last 50 messages + tickets)
+        List<Map<String, Object>> logs = new java.util.ArrayList<>();
+
+        // Recent messages
+        if (!chatIds.isEmpty()) {
+            List<com.kanux.entity.Message> recentMessages = messageRepository
+                    .findByChatIdInOrderByCreatedAtDesc(chatIds, PageRequest.of(0, 50));
+            for (com.kanux.entity.Message m : recentMessages) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("id", m.getId());
+                entry.put("type", "MESSAGE");
+                entry.put("method", "POST");
+                entry.put("endpoint", "/api/chats/" + m.getChatId() + "/messages");
+                entry.put("status", 200);
+                entry.put("status_text", "OK");
+                entry.put("message_type", m.getMessageType());
+                entry.put("content_preview", m.getContent() != null && m.getContent().length() > 60
+                        ? m.getContent().substring(0, 60) + "..."
+                        : m.getContent());
+                entry.put("media_url", m.getMediaUrl());
+                entry.put("user_profile_id", m.getUserProfileId());
+                entry.put("created_at", m.getCreatedAt());
+                entry.put("chat_id", m.getChatId());
+                // Find chat name
+                chats.stream().filter(c -> c.getId().equals(m.getChatId())).findFirst()
+                        .ifPresent(c -> entry.put("chat_name", c.getName()));
+                // Find member display name
+                members.stream().filter(mem -> mem.getUserProfileId().equals(m.getUserProfileId())).findFirst()
+                        .ifPresent(mem -> {
+                            if (mem.getUserProfile() != null)
+                                entry.put("user_name", mem.getUserProfile().getDisplayName());
+                        });
+                logs.add(entry);
+            }
+        }
+
+        // Recent tickets
+        tickets.stream().limit(30).forEach(t -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("id", t.getId());
+            entry.put("type", "TICKET");
+            entry.put("method", t.getCreatedAt().equals(t.getUpdatedAt()) ? "POST" : "PUT");
+            entry.put("endpoint", "/api/tickets");
+            entry.put("status", 200);
+            entry.put("status_text", "OK");
+            entry.put("content_preview", t.getTitle());
+            entry.put("ticket_status", t.getStatus() != null ? t.getStatus().name() : "OPEN");
+            entry.put("ticket_priority", t.getPriority() != null ? t.getPriority().name() : "MEDIUM");
+            entry.put("user_profile_id", t.getCreatorProfileId());
+            entry.put("created_at", t.getCreatedAt());
+            // Find user
+            if (t.getCreatorProfileId() != null) {
+                members.stream().filter(mem -> mem.getUserProfileId().equals(t.getCreatorProfileId())).findFirst()
+                        .ifPresent(mem -> {
+                            if (mem.getUserProfile() != null)
+                                entry.put("user_name", mem.getUserProfile().getDisplayName());
+                        });
+            }
+            logs.add(entry);
+        });
+
+        // Sort all logs by created_at desc
+        logs.sort((a, b) -> {
+            Instant ia = a.get("created_at") instanceof Instant ? (Instant) a.get("created_at") : Instant.MIN;
+            Instant ib = b.get("created_at") instanceof Instant ? (Instant) b.get("created_at") : Instant.MIN;
+            return ib.compareTo(ia);
+        });
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("stats", stats);
+        result.put("logs", logs);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
     // ── Get All Users ────────────────────────────────────────────────────────
     @GetMapping("/users")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAllUsers(
@@ -477,4 +611,5 @@ public class AdminController {
     private <T> ResponseEntity<ApiResponse<T>> forbidden() {
         return ResponseEntity.status(403).body(ApiResponse.fail("Acesso negado: Super Admin necessário"));
     }
+
 }
