@@ -29,6 +29,16 @@ export default function TicketScreen() {
   const [showInfo, setShowInfo] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
+  async function loadComments() {
+    if (!id) return;
+    try {
+      const commentsData = await getTicketComments(id);
+      setComments(commentsData);
+    } catch (error) {
+      console.error('Error loading comments:', error);
+    }
+  }
+
   async function loadData() {
     if (!id) return;
     try {
@@ -38,8 +48,7 @@ export default function TicketScreen() {
       if (!ticketData) throw new Error('Ticket não encontrado');
       setTicket(ticketData);
 
-      const commentsData = await getTicketComments(id);
-      setComments(commentsData);
+      await loadComments();
     } catch (error) {
       console.error('Error loading ticket:', error);
     } finally {
@@ -47,8 +56,35 @@ export default function TicketScreen() {
     }
   }
 
+  // Ref estável para loadComments — evita stale closure no Realtime
+  const loadCommentsRef = useRef(loadComments);
+  useEffect(() => { loadCommentsRef.current = loadComments; });
+
   useEffect(() => {
     loadData();
+  }, [id]);
+
+  // Realtime: escuta novos comentários no ticket
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel(`ticket-comments-${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'ticket_comments', filter: `ticket_id=eq.${id}` },
+        () => { loadCommentsRef.current(); }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') console.warn('[Realtime] canal de comentários com erro, usando polling');
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, [id]);
+
+  // Polling de fallback: atualiza comentários a cada 5 segundos
+  useEffect(() => {
+    if (!id) return;
+    const interval = setInterval(() => { loadCommentsRef.current(); }, 5000);
+    return () => clearInterval(interval);
   }, [id]);
 
   useEffect(() => {

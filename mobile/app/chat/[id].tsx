@@ -70,6 +70,10 @@ export default function ChatScreen() {
 
   const { messages, loading, sendMessage, refresh } = useOfflineMessages(id as string);
 
+  // Ref estável para o refresh — evita stale closure no Supabase Realtime
+  const refreshRef = useRef(refresh);
+  useEffect(() => { refreshRef.current = refresh; }, [refresh]);
+
   // Realtime: assina novas mensagens via Supabase para atualização ao vivo
   useEffect(() => {
     if (!id) return;
@@ -78,10 +82,20 @@ export default function ChatScreen() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${id}` },
-        () => { refresh(); }
+        () => { refreshRef.current(); }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Se o Realtime não estiver disponível, o polling abaixo garante as mensagens
+        if (status === 'CHANNEL_ERROR') console.warn('[Realtime] canal de mensagens com erro, usando polling');
+      });
     return () => { supabase.removeChannel(channel); };
+  }, [id]);
+
+  // Polling de fallback: garante mensagens mesmo sem Supabase Realtime configurado
+  useEffect(() => {
+    if (!id) return;
+    const interval = setInterval(() => { refreshRef.current(); }, 5000);
+    return () => clearInterval(interval);
   }, [id]);
 
   // Carregar info do chat e membros
