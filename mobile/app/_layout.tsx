@@ -7,6 +7,7 @@ import { WebSocketProvider } from '../src/contexts/WebSocketContext';
 import { useNotifications } from '../src/contexts/NotificationContext';
 import { colors } from '../src/theme';
 import { ActivityIndicator, View, Text, Image } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 function AuthGate() {
   const { user, profile, loading } = useAuth();
@@ -55,46 +56,50 @@ function AuthGate() {
 
 /** Componente que ativa o hook de notificações dentro dos providers de auth */
 function NotificationSetup() {
-  useNotifications();
+  const pathname = usePathname();
+  const activeChatId = pathname.startsWith('/chat/') ? pathname.replace('/chat/', '') : undefined;
+  useNotifications(activeChatId);
   return null;
 }
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <SyncProvider>
-        <WebSocketProvider>
-          <NotificationSetup />
-          <StatusBar style="dark" />
-          <AuthGate />
-          <Stack
-            screenOptions={{
-              headerStyle: { backgroundColor: colors.background },
-              headerTintColor: colors.text,
-              headerTitleStyle: { fontWeight: '600' },
-              headerShadowVisible: false,
-              contentStyle: { backgroundColor: colors.background },
-              animation: 'slide_from_right',
-            }}
-          >
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)/login" options={{ headerShown: false, presentation: 'modal' }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="chat/[id]" options={{ title: 'Chat', headerBackTitle: 'Voltar' }} />
-            <Stack.Screen name="ticket/[id]" options={{ title: 'Ticket', headerBackTitle: 'Voltar' }} />
-            <Stack.Screen 
-              name="company/select" 
-              options={{ 
-                title: 'Selecionar Empresa', 
-                headerBackTitle: 'Voltar', 
-                presentation: 'modal' 
-              }} 
-            />
-            <Stack.Screen name="admin" options={{ title: 'Admin' }} />
-            <Stack.Screen name="tickets/create" options={{ title: 'Novo Ticket' }} />
-          </Stack>
-        </WebSocketProvider>
-      </SyncProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <SyncProvider>
+          <WebSocketProvider>
+            <NotificationSetup />
+            <StatusBar style="dark" />
+            <AuthGate />
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.text,
+                headerTitleStyle: { fontWeight: '600' },
+                headerShadowVisible: false,
+                contentStyle: { backgroundColor: colors.background },
+                animation: 'slide_from_right',
+              }}
+            >
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)/login" options={{ headerShown: false, presentation: 'modal' }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="chat/[id]" options={{ title: 'Chat', headerBackTitle: 'Voltar' }} />
+              <Stack.Screen name="ticket/[id]" options={{ title: 'Ticket', headerBackTitle: 'Voltar' }} />
+              <Stack.Screen 
+                name="company/select" 
+                options={{ 
+                  title: 'Selecionar Empresa', 
+                  headerBackTitle: 'Voltar', 
+                  presentation: 'modal' 
+                }} 
+              />
+              <Stack.Screen name="admin" options={{ title: 'Admin' }} />
+              <Stack.Screen name="tickets/create" options={{ title: 'Novo Ticket' }} />
+            </Stack>
+          </WebSocketProvider>
+        </SyncProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

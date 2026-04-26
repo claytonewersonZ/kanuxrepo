@@ -80,6 +80,9 @@ export function useNotifications(activeChatId?: string) {
           // Ignorar mensagem se já processada
           if (lastMessageIds.current.has(msg.id)) return;
           lastMessageIds.current.add(msg.id);
+          if (lastMessageIds.current.size > 2000) {
+            lastMessageIds.current = new Set(Array.from(lastMessageIds.current).slice(-1000));
+          }
 
           if (isExpoGo) return;
 
@@ -93,8 +96,11 @@ export function useNotifications(activeChatId?: string) {
 
           try {
             const chatResult = await api.getChats(undefined, msg.chat_id);
-            if (chatResult?.data?.name) chatName = chatResult.data.name;
-          } catch {}
+            if (!chatResult?.data) return;
+            if (chatResult.data.name) chatName = chatResult.data.name;
+          } catch {
+            return;
+          }
 
           // Montar corpo da notificação
           let body = msg.content || '';
@@ -143,7 +149,13 @@ async function requestNotificationPermission(): Promise<string | null> {
   if (finalStatus !== 'granted') return null;
 
   try {
-    const tokenData = await Notifications.getExpoPushTokenAsync();
+    const projectId =
+      (Constants as any)?.expoConfig?.extra?.eas?.projectId ||
+      (Constants as any)?.easConfig?.projectId;
+
+    const tokenData = projectId
+      ? await Notifications.getExpoPushTokenAsync({ projectId })
+      : await Notifications.getExpoPushTokenAsync();
     return tokenData.data ?? null;
   } catch {
     return null;

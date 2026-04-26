@@ -14,6 +14,7 @@ import { ENV } from '../../src/lib/env';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ── Auxiliares de separador de data ─────────────────────────────────────────
 function getDateLabel(dateStr: string): string {
@@ -53,6 +54,8 @@ function buildListItems(msgs: any[], myProfileId?: string): any[] {
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, profile } = useAuth();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 8) : insets.bottom;
   const { subscribeChatMessages, subscribeChatTyping, sendMessageWs, sendTypingWs, isConnected: wsConnected } = useWebSocket();
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -399,8 +402,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Barra de informações do chat */}
       <View style={styles.chatHeader}>
@@ -422,7 +425,7 @@ export default function ChatScreen() {
       <FlatList
         ref={listRef}
         style={styles.messageList}
-        contentContainerStyle={styles.messageContent}
+        contentContainerStyle={[styles.messageContent, { paddingBottom: spacing.md + bottomInset }]}
         data={listItems}
         keyExtractor={(item: any) => item.id || item.label}
         inverted
@@ -511,7 +514,7 @@ export default function ChatScreen() {
         }
       />
 
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { paddingBottom: spacing.sm + bottomInset }]}>
         {canSendMessage ? (
           <>
             {/* Botões de mídia */}

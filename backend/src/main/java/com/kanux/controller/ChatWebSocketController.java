@@ -115,7 +115,7 @@ public class ChatWebSocketController {
             messagingTemplate.convertAndSend("/topic/chat/" + chatId, (Object) broadcast);
             log.debug("[WS] Mensagem broadcast → /topic/chat/{} por {}", chatId, senderName);
 
-        } catch (org.springframework.messaging.MessagingException | org.springframework.messaging.MessageHandlingException e) {
+        } catch (org.springframework.messaging.MessagingException e) {
             log.error("[WS] Erro ao processar mensagem no chat {}: {}", chatId, e.getMessage());
         }
     }

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Kanux",
     "slug": "kanux-mobile",
-    "version": "1.0.0.4",
+    "version": "1.0.0.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kanux",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kanux.mobile"
-      ,"buildNumber": "1004"
+      ,"buildNumber": "1005"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +23,7 @@
         "backgroundColor": "#09090B"
       },
       "package": "com.kanux.mobile",
-      "versionCode": 1004
+      "versionCode": 1005
     },
     "plugins": [
   "expo-router"

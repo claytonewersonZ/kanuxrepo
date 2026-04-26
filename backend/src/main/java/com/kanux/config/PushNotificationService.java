@@ -136,7 +136,7 @@ public class PushNotificationService {
                         truncate(response.body(), 200));
             }
 
-        } catch (java.io.IOException | InterruptedException | com.fasterxml.jackson.core.JsonProcessingException e) {
+        } catch (java.io.IOException | InterruptedException e) {
             log.warn("[Push] Falha ao enviar push notifications: {}", e.getMessage());
         }
     }
