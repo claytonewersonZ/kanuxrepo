@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api` : 'https://kanux-mobile-web-production.up.railway.app/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api` : 'https://kanux-mobile-web.onrender.com/api';
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE}${endpoint}`;

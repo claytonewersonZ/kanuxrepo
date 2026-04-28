@@ -36,7 +36,7 @@
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFteWJyZGxrZm9jbWlvbGNueWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MDQ3ODYsImV4cCI6MjA4Mzk4MDc4Nn0.B4R_9h58oSeC56l_eLafQk1fJpI29cM8T5rzqM5s2lg",
 
       "isProduction": true,
-      "apiUrl": "https://kanux-mobile-web-production.up.railway.app",
+      "apiUrl": "https://kanux-mobile-web.onrender.com",
       "eas": {
         "projectId": "a8abab8f-4062-42df-9b42-0ad68186f26c"
       }

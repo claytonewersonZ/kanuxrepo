@@ -11,7 +11,7 @@ const detectApiUrl = async (): Promise<string> => {
 
     // URLs to try in order of preference (produção primeiro!)
     const urlsToTry = [
-      'https://kanux-mobile-web-production.up.railway.app',
+      'https://kanux-mobile-web.onrender.com',
       'http://10.0.2.2:10000',
       'http://localhost:10000',
     ];
@@ -43,7 +43,7 @@ const detectApiUrl = async (): Promise<string> => {
     }
 
     console.warn('⚠️ Sem backend detectado, usando produção');
-    cachedApiUrl = 'https://kanux-mobile-web-production.up.railway.app';
+    cachedApiUrl = 'https://kanux-mobile-web.onrender.com';
     detectionPromise = null;
     return cachedApiUrl;
   })();
@@ -54,7 +54,7 @@ const detectApiUrl = async (): Promise<string> => {
 // Get API URL sync
 export const getApiUrl = (): string => {
   if (cachedApiUrl) return cachedApiUrl;
-  cachedApiUrl = 'https://kanux-mobile-web-production.up.railway.app';
+  cachedApiUrl = 'https://kanux-mobile-web.onrender.com';
   return cachedApiUrl;
 };
 
