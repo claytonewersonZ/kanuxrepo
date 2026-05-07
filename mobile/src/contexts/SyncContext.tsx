@@ -144,9 +144,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       
       for (const message of pending) {
         try {
-          const sent = await sendApiMessage(message.chatId, message.content, message.options);
+          const safeOptions = {
+            ...(message.options || {}),
+            clientMessageId: message.options?.clientMessageId
+              || `${message.chatId}:${new Date(message.createdAt || Date.now()).getTime()}:${Math.random().toString(36).slice(2, 10)}`,
+          };
+
+          const sent = await sendApiMessage(message.chatId, message.content, safeOptions);
           if (!sent) {
-            failed.push(message);
+            failed.push({ ...message, options: safeOptions });
           }
         } catch (error) {
           console.error('Error syncing message:', error);
@@ -210,11 +216,14 @@ export function useOfflineMessages(chatId: string) {
 
   const sendMessage = async (
     content: string,
-    options?: { messageType?: string; mediaUrl?: string; mediaName?: string }
+    options?: { messageType?: string; mediaUrl?: string; mediaName?: string; clientMessageId?: string }
   ) => {
+    const clientMessageId = options?.clientMessageId || `${chatId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+    const resolvedOptions = { ...(options || {}), clientMessageId };
+
     if (isOnline) {
       // Send directly
-      const message = await sendApiMessage(chatId, content, options);
+      const message = await sendApiMessage(chatId, content, resolvedOptions);
       if (message) {
         setMessages(prev => [...prev, message]);
       }
@@ -226,9 +235,10 @@ export function useOfflineMessages(chatId: string) {
         chat_id: chatId,
         user_profile_id: profile?.id,
         content,
-        message_type: options?.messageType ?? 'text',
-        media_url: options?.mediaUrl,
-        media_name: options?.mediaName,
+        message_type: resolvedOptions.messageType ?? 'text',
+        media_url: resolvedOptions.mediaUrl,
+        media_name: resolvedOptions.mediaName,
+        client_message_id: clientMessageId,
         attachments: [],
         created_at: new Date().toISOString(),
         pending: true,
@@ -238,7 +248,7 @@ export function useOfflineMessages(chatId: string) {
       await addPendingMessage({
         chatId,
         content,
-        options,
+        options: resolvedOptions,
         createdAt: tempMessage.created_at,
       });
       return tempMessage;

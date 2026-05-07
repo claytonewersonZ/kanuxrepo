@@ -314,7 +314,7 @@ export const api = {
     chatId: string,
     content: string,
     userProfileId: string,
-    options?: { messageType?: string; mediaUrl?: string; mediaName?: string }
+    options?: { messageType?: string; mediaUrl?: string; mediaName?: string; clientMessageId?: string }
   ) {
     return apiRequest(`/api/chats/${chatId}/messages`, {
       method: 'POST',
@@ -324,6 +324,7 @@ export const api = {
         message_type: options?.messageType ?? 'text',
         media_url: options?.mediaUrl,
         media_name: options?.mediaName,
+        client_message_id: options?.clientMessageId,
       }),
     });
   },

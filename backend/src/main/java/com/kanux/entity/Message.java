@@ -38,6 +38,9 @@ public class Message {
     @Column(name = "media_name", columnDefinition = "TEXT")
     private String mediaName;
 
+    @Column(name = "client_message_id", columnDefinition = "TEXT")
+    private String clientMessageId;
+
     @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private String attachments = "[]";

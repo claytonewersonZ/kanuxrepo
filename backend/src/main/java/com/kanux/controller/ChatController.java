@@ -150,6 +150,15 @@ public class ChatController {
         if (req.getUserProfileId() != null) {
             try { senderId = UUID.fromString(req.getUserProfileId()); } catch (Exception ignored) {}
         }
+        String clientMessageId = req.getClientMessageId();
+        if (clientMessageId != null && !clientMessageId.isBlank()) {
+            var existing = messageRepository.findByChatIdAndUserProfileIdAndClientMessageId(
+                    UUID.fromString(chatId), senderId, clientMessageId);
+            if (existing.isPresent()) {
+                return ResponseEntity.ok(ApiResponse.ok(toMap(existing.get())));
+            }
+        }
+
         Message message = new Message();
         message.setChatId(UUID.fromString(chatId));
         message.setUserProfileId(senderId);
@@ -157,6 +166,7 @@ public class ChatController {
         message.setMessageType(req.getMessageType() != null ? req.getMessageType() : "text");
         if (req.getMediaUrl() != null) message.setMediaUrl(req.getMediaUrl());
         if (req.getMediaName() != null) message.setMediaName(req.getMediaName());
+        if (clientMessageId != null && !clientMessageId.isBlank()) message.setClientMessageId(clientMessageId);
         message.setAttachments("[]");
         Message saved = messageRepository.save(message);
         Map<String, Object> payload = toMap(saved);
@@ -289,6 +299,7 @@ public class ChatController {
         map.put("message_type", m.getMessageType() != null ? m.getMessageType() : "text");
         map.put("media_url", m.getMediaUrl());
         map.put("media_name", m.getMediaName());
+        map.put("client_message_id", m.getClientMessageId());
         map.put("attachments", m.getAttachments()); map.put("created_at", m.getCreatedAt());
         map.put("updated_at", m.getUpdatedAt());
 

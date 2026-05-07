@@ -207,6 +207,10 @@ export default function ChatScreen() {
 
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const makeClientMessageId = useCallback(() => {
+    return `${id}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+  }, [id]);
+
   function handleTypingChange(text: string) {
     setNewMessage(text);
     if (!id) return;
@@ -230,13 +234,14 @@ export default function ChatScreen() {
     sendTypingWs(id, false);
 
     try {
-      const sentViaWs = wsConnected && sendMessageWs(id, newMessage.trim());
+      const clientMessageId = makeClientMessageId();
+      const sentViaWs = wsConnected && sendMessageWs(id, newMessage.trim(), 'text', undefined, undefined, clientMessageId);
       if (sentViaWs) {
         setNewMessage('');
         return;
       }
 
-      const sentMessage = await sendMessage(newMessage.trim());
+      const sentMessage = await sendMessage(newMessage.trim(), { clientMessageId });
       if (sentMessage) {
         setNewMessage('');
       }
@@ -307,9 +312,10 @@ export default function ChatScreen() {
       const mimeType = asset.mimeType || 'image/jpeg';
       const url = await uploadToSupabase(asset.uri, fileName, mimeType);
       if (!url) { Alert.alert('Erro', 'Falha ao enviar a foto.'); return; }
-      const sentViaWs = wsConnected && sendMessageWs(id, '', 'image', url, fileName);
+      const clientMessageId = makeClientMessageId();
+      const sentViaWs = wsConnected && sendMessageWs(id, '', 'image', url, fileName, clientMessageId);
       if (!sentViaWs) {
-        await sendMessage('', { messageType: 'image', mediaUrl: url, mediaName: fileName });
+        await sendMessage('', { messageType: 'image', mediaUrl: url, mediaName: fileName, clientMessageId });
       }
     } finally { setSending(false); }
   }
@@ -324,9 +330,10 @@ export default function ChatScreen() {
       const mimeType = asset.mimeType || 'application/octet-stream';
       const url = await uploadToSupabase(asset.uri, asset.name, mimeType);
       if (!url) { Alert.alert('Erro', 'Falha ao enviar o arquivo.'); return; }
-      const sentViaWs = wsConnected && sendMessageWs(id, '', 'document', url, asset.name);
+      const clientMessageId = makeClientMessageId();
+      const sentViaWs = wsConnected && sendMessageWs(id, '', 'document', url, asset.name, clientMessageId);
       if (!sentViaWs) {
-        await sendMessage('', { messageType: 'document', mediaUrl: url, mediaName: asset.name });
+        await sendMessage('', { messageType: 'document', mediaUrl: url, mediaName: asset.name, clientMessageId });
       }
     } finally { setSending(false); }
   }
@@ -366,9 +373,10 @@ export default function ChatScreen() {
       const fileName = `audio_${Date.now()}.m4a`;
       const url = await uploadToSupabase(uri, fileName, 'audio/m4a');
       if (!url) { Alert.alert('Erro', 'Falha ao enviar o áudio.'); return; }
-      const sentViaWs = wsConnected && sendMessageWs(id, '', 'audio', url, fileName);
+      const clientMessageId = makeClientMessageId();
+      const sentViaWs = wsConnected && sendMessageWs(id, '', 'audio', url, fileName, clientMessageId);
       if (!sentViaWs) {
-        await sendMessage('', { messageType: 'audio', mediaUrl: url, mediaName: fileName });
+        await sendMessage('', { messageType: 'audio', mediaUrl: url, mediaName: fileName, clientMessageId });
       }
     } finally { setSending(false); }
   }

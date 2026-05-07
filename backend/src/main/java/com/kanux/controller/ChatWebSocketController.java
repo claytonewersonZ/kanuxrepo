@@ -74,10 +74,42 @@ public class ChatWebSocketController {
                     ? String.valueOf(payload.get("message_type")) : "text";
             String mediaUrl = payload.containsKey("media_url") ? String.valueOf(payload.get("media_url")) : null;
             String mediaName = payload.containsKey("media_name") ? String.valueOf(payload.get("media_name")) : null;
+            String clientMessageId = payload.containsKey("client_message_id")
+                    ? String.valueOf(payload.get("client_message_id")) : null;
 
             if ("text".equals(messageType) && (content == null || content.isBlank())) {
                 log.warn("[WS] Mensagem de texto vazia ignorada no chat {}", chatId);
                 return;
+            }
+
+            // Idempotência: retries/offline sync com mesmo client_message_id não geram duplicata.
+            if (clientMessageId != null && !clientMessageId.isBlank() && !"null".equals(clientMessageId)) {
+                var existing = messageRepository.findByChatIdAndUserProfileIdAndClientMessageId(
+                        chatUuid, senderProfileId, clientMessageId);
+                if (existing.isPresent()) {
+                    Message dedup = existing.get();
+                    String senderNameDedup = userProfileRepository.findById(senderProfileId)
+                            .map(up -> up.getDisplayName() != null ? up.getDisplayName() : up.getEmail())
+                            .orElse("Usuário");
+
+                    Map<String, Object> dedupBroadcast = new LinkedHashMap<>();
+                    dedupBroadcast.put("id", dedup.getId().toString());
+                    dedupBroadcast.put("chat_id", chatId);
+                    dedupBroadcast.put("user_profile_id", senderProfileId.toString());
+                    dedupBroadcast.put("display_name", senderNameDedup);
+                    dedupBroadcast.put("content", dedup.getContent());
+                    dedupBroadcast.put("message_type", dedup.getMessageType());
+                    dedupBroadcast.put("media_url", dedup.getMediaUrl());
+                    dedupBroadcast.put("media_name", dedup.getMediaName());
+                    dedupBroadcast.put("client_message_id", dedup.getClientMessageId());
+                    dedupBroadcast.put("attachments", "[]");
+                    dedupBroadcast.put("created_at", dedup.getCreatedAt() != null ? dedup.getCreatedAt().toString()
+                            : Instant.now().toString());
+                    dedupBroadcast.put("source", "websocket_dedup");
+
+                    messagingTemplate.convertAndSend("/topic/chat/" + chatId, (Object) dedupBroadcast);
+                    return;
+                }
             }
 
             // Salvar mensagem no banco
@@ -89,6 +121,9 @@ public class ChatWebSocketController {
             message.setAttachments("[]");
             if (mediaUrl != null && !mediaUrl.equals("null")) message.setMediaUrl(mediaUrl);
             if (mediaName != null && !mediaName.equals("null")) message.setMediaName(mediaName);
+            if (clientMessageId != null && !clientMessageId.isBlank() && !"null".equals(clientMessageId)) {
+                message.setClientMessageId(clientMessageId);
+            }
             Message saved = messageRepository.save(message);
 
             // Buscar nome do remetente
@@ -106,6 +141,7 @@ public class ChatWebSocketController {
             broadcast.put("message_type", saved.getMessageType());
             broadcast.put("media_url", saved.getMediaUrl());
             broadcast.put("media_name", saved.getMediaName());
+            broadcast.put("client_message_id", saved.getClientMessageId());
             broadcast.put("attachments", "[]");
             broadcast.put("created_at", saved.getCreatedAt() != null ? saved.getCreatedAt().toString()
                     : Instant.now().toString());

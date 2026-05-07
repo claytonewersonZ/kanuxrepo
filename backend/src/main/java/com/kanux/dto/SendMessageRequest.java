@@ -23,4 +23,8 @@ public class SendMessageRequest {
     /** Nome original do arquivo (para documentos) */
     @JsonProperty("media_name")
     private String mediaName;
+
+    /** ID gerado no cliente para evitar duplicidade em retries/offline sync */
+    @JsonProperty("client_message_id")
+    private String clientMessageId;
 }

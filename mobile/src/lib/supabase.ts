@@ -252,7 +252,7 @@ export async function getChatMessages(chatId: string, limit = 50): Promise<Messa
 export async function sendMessage(
   chatId: string,
   content: string,
-  options?: { messageType?: string; mediaUrl?: string; mediaName?: string }
+  options?: { messageType?: string; mediaUrl?: string; mediaName?: string; clientMessageId?: string }
 ): Promise<Message | null> {
   const user = await getCurrentUser();
   if (!user) return null;

@@ -2,6 +2,7 @@ package com.kanux.repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,4 +23,11 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
 
     @Query("SELECT m FROM Message m WHERE m.chatId IN :chatIds ORDER BY m.createdAt DESC")
     List<Message> findByChatIdInOrderByCreatedAtDesc(@Param("chatIds") List<UUID> chatIds, org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT m FROM Message m WHERE m.chatId = :chatId AND m.userProfileId = :userProfileId AND m.clientMessageId = :clientMessageId")
+    Optional<Message> findByChatIdAndUserProfileIdAndClientMessageId(
+            @Param("chatId") UUID chatId,
+            @Param("userProfileId") UUID userProfileId,
+            @Param("clientMessageId") String clientMessageId
+    );
 }

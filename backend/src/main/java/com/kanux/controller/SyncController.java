@@ -121,6 +121,7 @@ public class SyncController {
         map.put("message_type", m.getMessageType() != null ? m.getMessageType() : "text");
         map.put("media_url", m.getMediaUrl());
         map.put("media_name", m.getMediaName());
+        map.put("client_message_id", m.getClientMessageId());
         map.put("attachments", m.getAttachments());
         map.put("created_at", m.getCreatedAt());
         map.put("updated_at", m.getUpdatedAt());

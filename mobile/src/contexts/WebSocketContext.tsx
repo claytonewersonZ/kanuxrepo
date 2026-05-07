@@ -70,7 +70,14 @@ interface WebSocketContextType {
   /** Inscreve um listener para status de digitação de um chat */
   subscribeChatTyping: (chatId: string, listener: TypingListener) => () => void;
   /** Envia mensagem via WebSocket */
-  sendMessageWs: (chatId: string, content: string, messageType?: string, mediaUrl?: string, mediaName?: string) => boolean;
+  sendMessageWs: (
+    chatId: string,
+    content: string,
+    messageType?: string,
+    mediaUrl?: string,
+    mediaName?: string,
+    clientMessageId?: string
+  ) => boolean;
   /** Envia evento de digitação via WebSocket */
   sendTypingWs: (chatId: string, isTyping: boolean) => void;
 }
@@ -415,12 +422,19 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     messageType = 'text',
     mediaUrl?: string,
     mediaName?: string,
+    clientMessageId?: string,
   ): boolean => {
     if (!clientRef.current?.connected) return false;
     try {
       clientRef.current.publish({
         destination: `/app/chat/${chatId}/send`,
-        body: JSON.stringify({ content, message_type: messageType, media_url: mediaUrl, media_name: mediaName }),
+        body: JSON.stringify({
+          content,
+          message_type: messageType,
+          media_url: mediaUrl,
+          media_name: mediaName,
+          client_message_id: clientMessageId,
+        }),
       });
       return true;
     } catch (e) {
