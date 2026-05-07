@@ -183,6 +183,7 @@ public class PushNotificationService {
                 msg.put("data", Map.of("chatId", chatId.toString()));
                 msg.put("sound", "default");
                 msg.put("priority", "high");
+                msg.put("categoryId", "MESSAGE_REPLY");
                 messages.add(msg);
             }
             if (messages.isEmpty()) return;

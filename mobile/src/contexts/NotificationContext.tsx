@@ -27,6 +27,7 @@ export function useNotifications(activeChatId?: string) {
   useEffect(() => {
     if (isExpoGo) return;
     let mounted = true;
+    let responseSub: { remove: () => void } | null = null;
     (async () => {
       const Notifications = await getNotificationsModule();
       if (!mounted) return;
@@ -39,11 +40,35 @@ export function useNotifications(activeChatId?: string) {
           shouldSetBadge: true,
         }),
       });
+      // Registrar categoria com ação de resposta inline (Android e iOS)
+      await Notifications.setNotificationCategoryAsync('MESSAGE_REPLY', [
+        {
+          identifier: 'reply',
+          buttonTitle: 'Responder',
+          options: { opensAppToForeground: false },
+          textInput: {
+            submitButtonTitle: 'Enviar',
+            placeholder: 'Digite uma mensagem...',
+          },
+        },
+      ]);
+      // Escutar resposta inline da notificação
+      responseSub = Notifications.addNotificationResponseReceivedListener(async (response) => {
+        if (response.actionIdentifier !== 'reply') return;
+        const chatId = response.notification.request.content.data?.chatId as string | undefined;
+        const userText = (response as any).userText as string | undefined;
+        const profileId = profile?.id;
+        if (chatId && userText?.trim() && profileId) {
+          await api.sendMessage(chatId, userText.trim(), profileId).catch(() => {});
+        }
+      });
     })();
     return () => {
       mounted = false;
+      responseSub?.remove();
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   useEffect(() => {
     activeChatRef.current = activeChatId;
