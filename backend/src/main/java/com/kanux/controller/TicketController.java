@@ -8,6 +8,7 @@ import com.kanux.entity.TicketComment;
 import com.kanux.entity.UserProfile;
 import com.kanux.repository.TicketCommentRepository;
 import com.kanux.repository.TicketRepository;
+import com.kanux.service.WorkingHoursService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,14 +27,17 @@ public class TicketController {
     private final TicketRepository ticketRepository;
     private final TicketCommentRepository commentRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final WorkingHoursService workingHoursService;
 
     public TicketController(
             TicketRepository ticketRepository,
             TicketCommentRepository commentRepository,
-            SimpMessagingTemplate messagingTemplate) {
+            SimpMessagingTemplate messagingTemplate,
+            WorkingHoursService workingHoursService) {
         this.ticketRepository = ticketRepository;
         this.commentRepository = commentRepository;
         this.messagingTemplate = messagingTemplate;
+        this.workingHoursService = workingHoursService;
     }
 
     @GetMapping
@@ -62,6 +66,7 @@ public class TicketController {
     public ResponseEntity<ApiResponse<Ticket>> createTicket(
             @AuthenticationPrincipal UserProfile p, @RequestBody CreateTicketRequest req) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
+        workingHoursService.ensureAllowed(p, "abrir chamados");
         UUID creatorId = req.getCreatorProfileId() != null ? UUID.fromString(req.getCreatorProfileId()) : p.getId();
         Ticket ticket = new Ticket();
         ticket.setCompanyId(UUID.fromString(req.getCompanyId()));
@@ -80,6 +85,7 @@ public class TicketController {
     public ResponseEntity<ApiResponse<Ticket>> updateTicket(
             @AuthenticationPrincipal UserProfile p, @RequestBody UpdateTicketRequest req) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
+        workingHoursService.ensureAllowed(p, "atualizar chamados");
         return ticketRepository.findById(UUID.fromString(req.getId())).map(t -> {
             if (req.getTitle()       != null) t.setTitle(req.getTitle());
             if (req.getDescription() != null) t.setDescription(req.getDescription());
@@ -100,6 +106,7 @@ public class TicketController {
     public ResponseEntity<ApiResponse<Void>> deleteTicket(
             @AuthenticationPrincipal UserProfile p, @RequestParam String id) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
+        workingHoursService.ensureAllowed(p, "alterar chamados");
         ticketRepository.deleteById(UUID.fromString(id));
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
@@ -122,6 +129,7 @@ public class TicketController {
             @AuthenticationPrincipal UserProfile p, @PathVariable String ticketId,
             @RequestBody Map<String, String> body) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
+        workingHoursService.ensureAllowed(p, "responder chamados");
         String content = body.get("content");
         if (content == null || content.isBlank()) return ResponseEntity.badRequest().body(ApiResponse.fail("content é obrigatório"));
         TicketComment comment = new TicketComment();

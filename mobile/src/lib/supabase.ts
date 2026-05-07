@@ -29,6 +29,8 @@ export type Profile = {
   phone: string | null;
   position: string | null;
   is_super_admin: boolean;
+  work_start_time?: string | null;
+  work_end_time?: string | null;
   created_at: string;
 };
 
@@ -161,6 +163,8 @@ export async function getUserProfile(userId?: string): Promise<Profile | null> {
       created_at: p.created_at ?? p.createdAt ?? new Date().toISOString(),
       phone: p.phone ?? null,
       position: p.position ?? null,
+      work_start_time: p.work_start_time ?? p.workStartTime ?? null,
+      work_end_time: p.work_end_time ?? p.workEndTime ?? null,
     };
   } catch (error) {
     console.error('Error fetching profile via API:', error);
@@ -184,6 +188,8 @@ export async function getUserProfile(userId?: string): Promise<Profile | null> {
           created_at: user.created_at,
           phone: null,
           position: null,
+          work_start_time: null,
+          work_end_time: null,
         };
       }
     } catch (fallbackError) {

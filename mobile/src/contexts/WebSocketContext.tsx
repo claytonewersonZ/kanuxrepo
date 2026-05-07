@@ -53,9 +53,37 @@ export interface WsTicketComment {
   };
 }
 
+export interface WsTicketUpdate {
+  id: string;
+  number: string;
+  companyId: string;
+  departmentId?: string | null;
+  creatorProfileId: string;
+  assigneeProfileId?: string | null;
+  title: string;
+  description?: string | null;
+  status: 'OPEN' | 'PENDING' | 'RESOLVED' | 'CLOSED';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface WsCreateTicketPayload {
+  companyId: string;
+  title: string;
+  description?: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  departmentId?: string;
+  assigneeProfileId?: string;
+}
+
+export type TicketCreatedCallback = (result: { success: boolean; ticket?: WsTicketUpdate; error?: string }) => void;
+
 type MessageListener = (msg: WsMessage) => void;
 type AlertListener = (alert: WsErrorAlert) => void;
 type TicketCommentListener = (comment: WsTicketComment) => void;
+type TicketUpdateListener = (ticket: WsTicketUpdate) => void;
 export type TypingPayload = { user_profile_id: string; display_name: string; typing: boolean };
 type TypingListener = (payload: TypingPayload) => void;
 export type PresencePayload = { user_profile_id: string; online: boolean };
@@ -69,6 +97,8 @@ interface WebSocketContextType {
   subscribeAdminAlerts: (companyId: string, listener: AlertListener) => () => void;
   /** Inscreve um listener para comentários de ticket */
   subscribeTicketComments: (ticketId: string, listener: TicketCommentListener) => () => void;
+  /** Inscreve um listener para mudanças de status/prioridade do ticket */
+  subscribeTicketUpdates: (ticketId: string, listener: TicketUpdateListener) => () => void;
   /** Inscreve um listener para status de digitação de um chat */
   subscribeChatTyping: (chatId: string, listener: TypingListener) => () => void;
   /** Inscreve um listener para presença (online/offline) de um chat */
@@ -84,6 +114,14 @@ interface WebSocketContextType {
   ) => boolean;
   /** Envia evento de digitação via WebSocket */
   sendTypingWs: (chatId: string, isTyping: boolean) => void;
+  /** Envia comentário de ticket via WebSocket */
+  sendTicketCommentWs: (ticketId: string, content: string) => boolean;
+  /** Envia atualização de ticket via WebSocket */
+  updateTicketWs: (ticketId: string, data: { status?: string; priority?: string }) => boolean;
+  /** Cria ticket via WebSocket */
+  createTicketWs: (data: WsCreateTicketPayload, onResult: TicketCreatedCallback) => boolean;
+  /** Inscreve para novos tickets de uma empresa */
+  subscribeCompanyTickets: (companyId: string, listener: (ticket: WsTicketUpdate) => void) => () => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -102,6 +140,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const alertListenersRef = useRef<Map<string, Set<AlertListener>>>(new Map());
   // Map ticketId → Set<TicketCommentListener>
   const ticketListenersRef = useRef<Map<string, Set<TicketCommentListener>>>(new Map());
+  // Map ticketId → Set<TicketUpdateListener>
+  const ticketUpdateListenersRef = useRef<Map<string, Set<TicketUpdateListener>>>(new Map());
+  // Map companyId → Set<TicketUpdateListener> (novos tickets)
+  const companyTicketListenersRef = useRef<Map<string, Set<TicketUpdateListener>>>(new Map());
+  // Pending create callbacks
+  const createTicketCallbackRef = useRef<TicketCreatedCallback | null>(null);
   // Map chatId → Set<TypingListener>
   const typingListenersRef = useRef<Map<string, Set<TypingListener>>>(new Map());
   // Map chatId → Set<PresenceListener>
@@ -197,7 +241,35 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         handleTicketComment(ticketId, msg);
       });
       stompSubsRef.current.set(`ticket:${ticketId}`, sub);
+
+      if (ticketUpdateListenersRef.current.has(ticketId)) {
+        const updateSub = client.subscribe(`/topic/ticket/${ticketId}/updated`, (msg) => {
+          handleTicketUpdated(ticketId, msg);
+        });
+        stompSubsRef.current.set(`ticket-update:${ticketId}`, updateSub);
+      }
     }
+
+    // Re-inscrever tópicos de novos tickets por empresa
+    for (const companyId of companyTicketListenersRef.current.keys()) {
+      const sub = client.subscribe(`/topic/company/${companyId}/tickets`, (msg) => {
+        handleCompanyTicket(companyId, msg);
+      });
+      stompSubsRef.current.set(`company-tickets:${companyId}`, sub);
+    }
+
+    // Inscrever queue pessoal de confirmação de criação de ticket
+    client.subscribe('/user/queue/ticket-created', (msg) => {
+      try {
+        const result = JSON.parse(msg.body);
+        if (createTicketCallbackRef.current) {
+          createTicketCallbackRef.current(result);
+          createTicketCallbackRef.current = null;
+        }
+      } catch (e) {
+        console.warn('[WS] Payload inválido em ticket-created', e);
+      }
+    });
   }
 
   function handleTyping(chatId: string, frame: IMessage) {
@@ -257,6 +329,30 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.warn('[WS] Payload inválido no ticket', ticketId, e);
+    }
+  }
+
+  function handleTicketUpdated(ticketId: string, frame: IMessage) {
+    try {
+      const payload: WsTicketUpdate = JSON.parse(frame.body);
+      const listeners = ticketUpdateListenersRef.current.get(ticketId);
+      if (listeners) {
+        listeners.forEach((fn) => fn(payload));
+      }
+    } catch (e) {
+      console.warn('[WS] Payload inválido na atualização de ticket', ticketId, e);
+    }
+  }
+
+  function handleCompanyTicket(companyId: string, frame: IMessage) {
+    try {
+      const payload: WsTicketUpdate = JSON.parse(frame.body);
+      const listeners = companyTicketListenersRef.current.get(companyId);
+      if (listeners) {
+        listeners.forEach((fn) => fn(payload));
+      }
+    } catch (e) {
+      console.warn('[WS] Payload inválido em novo ticket da empresa', companyId, e);
     }
   }
 
@@ -396,6 +492,40 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const subscribeTicketUpdates = useCallback((ticketId: string, listener: TicketUpdateListener): (() => void) => {
+    if (!ticketUpdateListenersRef.current.has(ticketId)) {
+      ticketUpdateListenersRef.current.set(ticketId, new Set());
+    }
+    ticketUpdateListenersRef.current.get(ticketId)!.add(listener);
+
+    const key = `ticket-update:${ticketId}`;
+    if (clientRef.current?.connected && !stompSubsRef.current.has(key)) {
+      try {
+        const sub = clientRef.current.subscribe(`/topic/ticket/${ticketId}/updated`, (msg) => {
+          handleTicketUpdated(ticketId, msg);
+        });
+        stompSubsRef.current.set(key, sub);
+      } catch (e) {
+        console.warn('[WS] Erro ao inscrever atualização de ticket', ticketId, e);
+      }
+    }
+
+    return () => {
+      const set = ticketUpdateListenersRef.current.get(ticketId);
+      if (set) {
+        set.delete(listener);
+        if (set.size === 0) {
+          ticketUpdateListenersRef.current.delete(ticketId);
+          const sub = stompSubsRef.current.get(key);
+          if (sub) {
+            try { sub.unsubscribe(); } catch {}
+            stompSubsRef.current.delete(key);
+          }
+        }
+      }
+    };
+  }, []);
+
   const subscribeChatTyping = useCallback((chatId: string, listener: TypingListener): (() => void) => {
     if (!typingListenersRef.current.has(chatId)) {
       typingListenersRef.current.set(chatId, new Set());
@@ -476,6 +606,84 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const sendTicketCommentWs = useCallback((ticketId: string, content: string): boolean => {
+    if (!clientRef.current?.connected) return false;
+    try {
+      clientRef.current.publish({
+        destination: `/app/ticket/${ticketId}/comment`,
+        body: JSON.stringify({ content }),
+      });
+      return true;
+    } catch (e) {
+      console.warn('[WS] Falha ao enviar comentário de ticket:', e);
+      return false;
+    }
+  }, []);
+
+  const updateTicketWs = useCallback((ticketId: string, data: { status?: string; priority?: string }): boolean => {
+    if (!clientRef.current?.connected) return false;
+    try {
+      clientRef.current.publish({
+        destination: `/app/ticket/${ticketId}/update`,
+        body: JSON.stringify(data),
+      });
+      return true;
+    } catch (e) {
+      console.warn('[WS] Falha ao atualizar ticket via WS:', e);
+      return false;
+    }
+  }, []);
+
+  const createTicketWs = useCallback((data: WsCreateTicketPayload, onResult: TicketCreatedCallback): boolean => {
+    if (!clientRef.current?.connected) return false;
+    try {
+      createTicketCallbackRef.current = onResult;
+      clientRef.current.publish({
+        destination: '/app/ticket/create',
+        body: JSON.stringify(data),
+      });
+      return true;
+    } catch (e) {
+      console.warn('[WS] Falha ao criar ticket via WS:', e);
+      createTicketCallbackRef.current = null;
+      return false;
+    }
+  }, []);
+
+  const subscribeCompanyTickets = useCallback((companyId: string, listener: (ticket: WsTicketUpdate) => void): (() => void) => {
+    if (!companyTicketListenersRef.current.has(companyId)) {
+      companyTicketListenersRef.current.set(companyId, new Set());
+    }
+    companyTicketListenersRef.current.get(companyId)!.add(listener);
+
+    const key = `company-tickets:${companyId}`;
+    if (clientRef.current?.connected && !stompSubsRef.current.has(key)) {
+      try {
+        const sub = clientRef.current.subscribe(`/topic/company/${companyId}/tickets`, (msg) => {
+          handleCompanyTicket(companyId, msg);
+        });
+        stompSubsRef.current.set(key, sub);
+      } catch (e) {
+        console.warn('[WS] Erro ao inscrever tickets da empresa', companyId, e);
+      }
+    }
+
+    return () => {
+      const set = companyTicketListenersRef.current.get(companyId);
+      if (set) {
+        set.delete(listener);
+        if (set.size === 0) {
+          companyTicketListenersRef.current.delete(companyId);
+          const sub = stompSubsRef.current.get(key);
+          if (sub) {
+            try { sub.unsubscribe(); } catch {}
+            stompSubsRef.current.delete(key);
+          }
+        }
+      }
+    };
+  }, []);
+
   const sendMessageWs = useCallback((
     chatId: string,
     content: string,
@@ -509,10 +717,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       subscribeChatMessages,
       subscribeAdminAlerts,
       subscribeTicketComments,
+      subscribeTicketUpdates,
       subscribeChatTyping,
       subscribePresence,
       sendMessageWs,
       sendTypingWs,
+      sendTicketCommentWs,
+      updateTicketWs,
+      createTicketWs,
+      subscribeCompanyTickets,
     }}>
       {children}
     </WebSocketContext.Provider>

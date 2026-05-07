@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
 import { SyncProvider } from '../src/contexts/SyncContext';
 import { WebSocketProvider } from '../src/contexts/WebSocketContext';
+import { ThemeProvider } from '../src/contexts/ThemeContext';
 import { useNotifications } from '../src/contexts/NotificationContext';
 import { colors } from '../src/theme';
 import { ActivityIndicator, View, Text, Image } from 'react-native';
@@ -65,6 +66,7 @@ function NotificationSetup() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
+      <ThemeProvider>
       <AuthProvider>
         <SyncProvider>
           <WebSocketProvider>
@@ -100,6 +102,7 @@ export default function RootLayout() {
           </WebSocketProvider>
         </SyncProvider>
       </AuthProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

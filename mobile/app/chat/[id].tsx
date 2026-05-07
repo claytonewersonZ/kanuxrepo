@@ -11,6 +11,7 @@ import { useWebSocket } from '../../src/contexts/WebSocketContext';
 import { supabase, getChatMembersForChat, addMemberToChat, removeMemberFromChat, getCompanyMembers, ChatMember, Chat } from '../../src/lib/supabase';
 import { api } from '../../src/lib/api';
 import { ENV } from '../../src/lib/env';
+import { getWorkingHoursRestrictionMessage } from '../../src/lib/workingHours';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
@@ -76,7 +77,7 @@ export default function ChatScreen() {
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<{ uri: string; type: 'image' | 'document'; name?: string | null } | null>(null);
 
-  const { messages, loading, sendMessage, refresh } = useOfflineMessages(id as string);
+  const { messages, loading, refresh } = useOfflineMessages(id as string);
 
   // Ref estável para o refresh — evita stale closure no Supabase Realtime
   const refreshRef = useRef(refresh);
@@ -91,13 +92,6 @@ export default function ChatScreen() {
     });
     return unsub;
   }, [id, subscribeChatMessages]);
-
-  // Fallback REST: quando WS cair, faz refresh periódico para não perder mensagens.
-  useEffect(() => {
-    if (!id || wsConnected) return;
-    const interval = setInterval(() => { refreshRef.current(); }, 8000);
-    return () => clearInterval(interval);
-  }, [id, wsConnected]);
 
   // Carregar info do chat e membros
   useEffect(() => {
@@ -182,6 +176,11 @@ export default function ChatScreen() {
     if (myMembership?.role === 'ADMIN' || myMembership?.role === 'MANAGER') return true;
     return false;
   })();
+  const workingHoursMessage = getWorkingHoursRestrictionMessage(profile, 'enviar mensagens');
+  const blockedByWorkingHours = !!workingHoursMessage;
+  const blockedInputMessage = blockedByWorkingHours
+    ? workingHoursMessage
+    : 'Apenas admins e managers podem enviar mensagens';
 
   // Status de digitação via WebSocket STOMP (fallback: polling Supabase se WS não conectado)
   useEffect(() => {
@@ -238,6 +237,7 @@ export default function ChatScreen() {
 
   function handleTypingChange(text: string) {
     setNewMessage(text);
+    if (blockedByWorkingHours) return;
     if (!id) return;
 
     // Envia typing=true via WebSocket STOMP
@@ -252,6 +252,10 @@ export default function ChatScreen() {
 
   async function handleSend() {
     if (!newMessage.trim() || !id || sending) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
 
     setSending(true);
     // Cancelar typing ao enviar
@@ -265,11 +269,7 @@ export default function ChatScreen() {
         setNewMessage('');
         return;
       }
-
-      const sentMessage = await sendMessage(newMessage.trim(), { clientMessageId });
-      if (sentMessage) {
-        setNewMessage('');
-      }
+      Alert.alert('WebSocket desconectado', 'Conecte-se novamente para enviar mensagens em tempo real.');
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
     } finally {
@@ -319,6 +319,10 @@ export default function ChatScreen() {
 
   async function handlePickPhoto() {
     if (!id || sending) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permissão necessária', 'Habilite o acesso à galeria nas configurações.');
@@ -340,13 +344,17 @@ export default function ChatScreen() {
       const clientMessageId = makeClientMessageId();
       const sentViaWs = wsConnected && sendMessageWs(id, '', 'image', url, fileName, clientMessageId);
       if (!sentViaWs) {
-        await sendMessage('', { messageType: 'image', mediaUrl: url, mediaName: fileName, clientMessageId });
+        Alert.alert('WebSocket desconectado', 'Conecte-se novamente para enviar mensagens em tempo real.');
       }
     } finally { setSending(false); }
   }
 
   async function handlePickDocument() {
     if (!id || sending) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
     const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
@@ -358,13 +366,17 @@ export default function ChatScreen() {
       const clientMessageId = makeClientMessageId();
       const sentViaWs = wsConnected && sendMessageWs(id, '', 'document', url, asset.name, clientMessageId);
       if (!sentViaWs) {
-        await sendMessage('', { messageType: 'document', mediaUrl: url, mediaName: asset.name, clientMessageId });
+        Alert.alert('WebSocket desconectado', 'Conecte-se novamente para enviar mensagens em tempo real.');
       }
     } finally { setSending(false); }
   }
 
   async function handleStartRecording() {
     if (isRecording || recording || preparingRecordingRef.current || sending) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
 
     preparingRecordingRef.current = true;
     try {
@@ -401,7 +413,7 @@ export default function ChatScreen() {
       const clientMessageId = makeClientMessageId();
       const sentViaWs = wsConnected && sendMessageWs(id, '', 'audio', url, fileName, clientMessageId);
       if (!sentViaWs) {
-        await sendMessage('', { messageType: 'audio', mediaUrl: url, mediaName: fileName, clientMessageId });
+        Alert.alert('WebSocket desconectado', 'Conecte-se novamente para enviar mensagens em tempo real.');
       }
     } finally { setSending(false); }
   }
@@ -538,7 +550,7 @@ export default function ChatScreen() {
       />
 
       <View style={[styles.inputContainer, { paddingBottom: spacing.sm + bottomInset }]}>
-        {canSendMessage ? (
+        {canSendMessage && !blockedByWorkingHours ? (
           <>
             {/* Botões de mídia */}
             <TouchableOpacity style={styles.mediaButton} onPress={handlePickPhoto} disabled={sending}>
@@ -579,7 +591,7 @@ export default function ChatScreen() {
         ) : (
           <View style={styles.blockedInput}>
             <Ionicons name="lock-closed" size={16} color={colors.textMuted} />
-            <Text style={styles.blockedText}>Apenas admins e managers podem enviar mensagens</Text>
+            <Text style={styles.blockedText}>{blockedInputMessage}</Text>
           </View>
         )}
       </View>

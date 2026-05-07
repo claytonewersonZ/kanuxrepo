@@ -15,9 +15,12 @@ import {
 import { api } from '../../src/lib/api';
 import { colors, spacing, borderRadius } from '../../src/theme';
 import KanuxLogo from '../../src/components/KanuxLogo';
+import { useTheme, getWeatherColors } from '../../src/contexts/ThemeContext';
+import { getWeatherGreeting } from '../../src/lib/weather';
 
 export default function HomeScreen() {
   const { user, profile, isOnline } = useAuth();
+  const { weather, weatherLoading, themeMode, isDark } = useTheme();
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
@@ -126,15 +129,15 @@ export default function HomeScreen() {
   const displayCompanies = isSuperAdmin ? (allCompanies.length > 0 ? allCompanies : companies) : companies;
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
+    <View style={[styles.container, isDark ? null : styles.containerLight]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? colors.surface : '#FFFFFF'} />
       
       {/* Discord-style Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isDark ? null : styles.headerLight]}>
         <View style={styles.headerLeft}>
           <KanuxLogo size="sm" showText={false} />
           <View>
-            <Text style={styles.headerTitle}>Kanux</Text>
+            <Text style={[styles.headerTitle, isDark ? null : styles.textDark]}>Kanux</Text>
             <Text style={styles.headerSubtitle}>
               {isSuperAdmin ? 'Super Admin' : (profile?.position || 'Membro')}
             </Text>
@@ -153,11 +156,58 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {/* Greeting */}
-        <View style={styles.greetingSection}>
-          <Text style={styles.greeting}>Olá, {profile?.display_name || user?.email?.split('@')[0] || 'Usuário'}</Text>
-          <Text style={styles.greetingSub}>O que deseja fazer hoje?</Text>
-        </View>
+        {/* Weather Banner */}
+        {(() => {
+          const wColors = getWeatherColors(weather?.condition ?? (isDark ? 'night_clear' : 'sunny'));
+          const name = profile?.display_name || user?.email?.split('@')[0] || 'Usuário';
+          const greeting = weather
+            ? getWeatherGreeting(weather.condition, name)
+            : { title: `Olá, ${name}`, subtitle: 'Carregando clima...' };
+          return (
+            <View style={[styles.weatherBanner, { backgroundColor: wColors.bg }]}>
+              {/* Overlay decorativo */}
+              <View style={[styles.weatherOverlay, { backgroundColor: wColors.bgSecondary + '40' }]} />
+
+              {/* Conteúdo principal */}
+              <View style={styles.weatherMain}>
+                <View style={styles.weatherLeft}>
+                  <Text style={[styles.weatherGreeting, { color: wColors.textPrimary }]}>
+                    {greeting.title}
+                  </Text>
+                  {greeting.subtitle ? (
+                    <Text style={[styles.weatherSubtitle, { color: wColors.textSecondary }]}>
+                      {greeting.subtitle}
+                    </Text>
+                  ) : null}
+
+                  {/* Condição climática com card */}
+                  <View style={[styles.weatherConditionCard, { backgroundColor: wColors.cardBg }]}>
+                    <Text style={styles.weatherConditionIcon}>{wColors.icon}</Text>
+                    <Text style={[styles.weatherConditionText, { color: wColors.textSecondary }]}>
+                      {weather?.description ?? (weatherLoading ? 'Carregando...' : 'Sem dados')}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.weatherRight}>
+                  <Text style={[styles.weatherTemp, { color: wColors.textPrimary }]}>
+                    {weather ? `${weather.temperature}°C` : '--'}
+                  </Text>
+                  {weather?.city ? (
+                    <View style={styles.weatherCityBox}>
+                      <Text style={[styles.weatherCity, { color: wColors.textSecondary }]}>
+                        {weather.city}, Brasil
+                      </Text>
+                      <Text style={[styles.weatherCityCondition, { color: wColors.textSecondary }]}>
+                        {weather.description}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Company Selector */}
         <View style={styles.section}>
@@ -297,11 +347,14 @@ function getPriorityColor(priority: string) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  containerLight: { backgroundColor: '#F5F5F7' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.md, paddingTop: Platform.OS === 'ios' ? 56 : 12, paddingBottom: 12,
     backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.divider,
   },
+  headerLight: { backgroundColor: '#FFFFFF', borderBottomColor: '#E5E5EA' },
+  textDark: { color: '#1A1A1E' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   headerSubtitle: { fontSize: 12, color: colors.textMuted },
@@ -314,6 +367,37 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: 6,
     backgroundColor: colors.success, borderWidth: 2, borderColor: colors.surface,
   },
+  // ── Weather Banner ──────────────────────────────────────────────────────────
+  weatherBanner: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    paddingBottom: spacing.lg,
+    overflow: 'hidden',
+    minHeight: 140,
+  },
+  weatherOverlay: {
+    position: 'absolute', top: 0, right: 0, width: 200, height: 200,
+    borderRadius: 100, transform: [{ translateX: 60 }, { translateY: -60 }],
+  },
+  weatherMain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  weatherLeft: { flex: 1, gap: 6 },
+  weatherRight: { alignItems: 'flex-end', gap: 4 },
+  weatherGreeting: { fontSize: 18, fontWeight: '700', lineHeight: 24 },
+  weatherSubtitle: { fontSize: 13, fontWeight: '500' },
+  weatherConditionCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: borderRadius.md, alignSelf: 'flex-start', marginTop: 4,
+  },
+  weatherConditionIcon: { fontSize: 22 },
+  weatherConditionText: { fontSize: 13, fontWeight: '500' },
+  weatherTemp: { fontSize: 48, fontWeight: '800', lineHeight: 52 },
+  weatherCityBox: { alignItems: 'flex-end' },
+  weatherCity: { fontSize: 12, fontWeight: '600' },
+  weatherCityCondition: { fontSize: 11 },
+  // ── Resto ───────────────────────────────────────────────────────────────────
   content: { paddingBottom: spacing.lg },
   greetingSection: { padding: spacing.md, paddingTop: spacing.lg },
   greeting: { fontSize: 22, fontWeight: '700', color: colors.text },

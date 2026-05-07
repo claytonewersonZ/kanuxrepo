@@ -1,6 +1,7 @@
 package com.kanux.config;
 
 import com.kanux.dto.ApiResponse;
+import com.kanux.exception.OutsideWorkingHoursException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,11 @@ public class GlobalExceptionHandler {
     public void handleAsyncNotUsable(AsyncRequestNotUsableException e) {
         log.debug("[Network] Cliente desconectou antes da resposta: {}", e.getMessage());
         // Sem ResponseEntity — a resposta já não pode ser enviada
+    }
+
+    @ExceptionHandler(OutsideWorkingHoursException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOutsideWorkingHours(OutsideWorkingHoursException e) {
+        return ResponseEntity.status(403).body(ApiResponse.fail(e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

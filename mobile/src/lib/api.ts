@@ -408,6 +408,7 @@ export const api = {
   async adminUpdateUser(profileId: string, data: {
     display_name?: string; email?: string; position?: string; phone?: string;
     password?: string; role?: string; company_id?: string; is_super_admin?: string;
+    work_start_time?: string; work_end_time?: string;
   }) {
     return apiRequest(`/api/admin/users/${profileId}`, {
       method: 'PUT',

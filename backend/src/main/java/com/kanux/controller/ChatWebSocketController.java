@@ -1,10 +1,12 @@
 package com.kanux.controller;
 
 import com.kanux.entity.Message;
+import com.kanux.entity.UserProfile;
 import com.kanux.config.PushNotificationService;
 import com.kanux.repository.ChatMemberRepository;
 import com.kanux.repository.MessageRepository;
 import com.kanux.repository.UserProfileRepository;
+import com.kanux.service.WorkingHoursService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -38,17 +40,20 @@ public class ChatWebSocketController {
     private final UserProfileRepository userProfileRepository;
     private final ChatMemberRepository chatMemberRepository;
     private final PushNotificationService pushNotificationService;
+    private final WorkingHoursService workingHoursService;
 
     public ChatWebSocketController(SimpMessagingTemplate messagingTemplate,
                                     MessageRepository messageRepository,
                                     UserProfileRepository userProfileRepository,
                                     ChatMemberRepository chatMemberRepository,
-                                    PushNotificationService pushNotificationService) {
+                                    PushNotificationService pushNotificationService,
+                                    WorkingHoursService workingHoursService) {
         this.messagingTemplate = messagingTemplate;
         this.messageRepository = messageRepository;
         this.userProfileRepository = userProfileRepository;
         this.chatMemberRepository = chatMemberRepository;
         this.pushNotificationService = pushNotificationService;
+        this.workingHoursService = workingHoursService;
     }
 
     /**
@@ -70,6 +75,16 @@ public class ChatWebSocketController {
             UUID senderProfileId = UUID.fromString(principal.getName());
             if (!chatMemberRepository.existsByChatIdAndUserProfileId(chatUuid, senderProfileId)) {
                 log.warn("[WS] Usuário {} tentou enviar mensagem sem participar do chat {}", senderProfileId, chatId);
+                return;
+            }
+
+            UserProfile senderProfile = userProfileRepository.findById(senderProfileId).orElse(null);
+            if (senderProfile == null) {
+                log.warn("[WS] Perfil {} não encontrado no envio de chat {}", senderProfileId, chatId);
+                return;
+            }
+            if (!workingHoursService.isWithinWorkingHours(senderProfile)) {
+                log.warn("[WS] Usuário {} bloqueado fora do horário de trabalho no chat {}", senderProfileId, chatId);
                 return;
             }
 
@@ -131,9 +146,8 @@ public class ChatWebSocketController {
             Message saved = messageRepository.save(message);
 
             // Buscar nome do remetente
-            String senderName = userProfileRepository.findById(senderProfileId)
-                    .map(up -> up.getDisplayName() != null ? up.getDisplayName() : up.getEmail())
-                    .orElse("Usuário");
+                String senderName = senderProfile.getDisplayName() != null
+                    ? senderProfile.getDisplayName() : senderProfile.getEmail();
 
             // Montar payload para broadcast
             Map<String, Object> broadcast = new LinkedHashMap<>();
@@ -182,11 +196,14 @@ public class ChatWebSocketController {
             if (!chatMemberRepository.existsByChatIdAndUserProfileId(chatUuid, nonNullTypingSenderId)) {
                 return;
             }
+            UserProfile senderProfile = userProfileRepository.findById(nonNullTypingSenderId).orElse(null);
+            if (senderProfile == null || !workingHoursService.isWithinWorkingHours(senderProfile)) {
+                return;
+            }
             boolean isTyping = Boolean.TRUE.equals(payload.get("typing"));
 
-            String senderName = userProfileRepository.findById(nonNullTypingSenderId)
-                    .map(up -> up.getDisplayName() != null ? up.getDisplayName() : up.getEmail())
-                    .orElse("Usuário");
+            String senderName = senderProfile.getDisplayName() != null
+                    ? senderProfile.getDisplayName() : senderProfile.getEmail();
 
             Map<String, Object> typingPayload = Map.of(
                     "user_profile_id", senderProfileId.toString(),

@@ -5,7 +5,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.UUID;
 
 @Getter
@@ -41,6 +43,16 @@ public class UserProfile {
     @JsonProperty("push_token")
     @Column(name = "push_token")
     private String pushToken;
+
+    @JsonProperty("work_start_time")
+    @JsonFormat(pattern = "HH:mm")
+    @Column(name = "work_start_time")
+    private LocalTime workStartTime;
+
+    @JsonProperty("work_end_time")
+    @JsonFormat(pattern = "HH:mm")
+    @Column(name = "work_end_time")
+    private LocalTime workEndTime;
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

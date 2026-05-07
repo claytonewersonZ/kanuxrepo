@@ -7,12 +7,21 @@ import { colors, spacing, borderRadius } from '../src/theme';
 import { api } from '../src/lib/api';
 import { useWebSocket, WsErrorAlert } from '../src/contexts/WebSocketContext';
 import { useAuth } from '../src/contexts/AuthContext';
+import { isValidWorkingHoursInput } from '../src/lib/workingHours';
 
 interface Company { id: string; name: string; slug: string; created_at: string; }
 interface Ticket { id: string; title: string; status: string; priority: string; }
 interface Member {
   id: string; role: string; user_profile_id: string;
-  user_profiles: { id?: string; display_name: string; email: string; position?: string; };
+  user_profiles: {
+    id?: string;
+    display_name: string;
+    email: string;
+    position?: string;
+    phone?: string;
+    work_start_time?: string | null;
+    work_end_time?: string | null;
+  };
 }
 interface Chat { id: string; name: string; is_private: boolean; only_admins_send?: boolean; department_id?: string; }
 interface Department { id: string; name: string; slug: string; }
@@ -47,6 +56,7 @@ export default function AdminScreen() {
   const params = useLocalSearchParams();
   const { profile } = useAuth();
   const { subscribeAdminAlerts } = useWebSocket();
+  const canManageWorkingHours = profile?.is_super_admin === true;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [currentCompanyId, setCurrentCompanyId] = useState<string>((params.companyId as string) || '');
   const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
@@ -108,6 +118,8 @@ export default function AdminScreen() {
   const [editUserRole, setEditUserRole] = useState('MEMBER');
   const [editUserPassword, setEditUserPassword] = useState('');
   const [editUserIsSuperAdmin, setEditUserIsSuperAdmin] = useState(false);
+  const [editUserWorkStart, setEditUserWorkStart] = useState('');
+  const [editUserWorkEnd, setEditUserWorkEnd] = useState('');
   const [savingEditUser, setSavingEditUser] = useState(false);
 
   useEffect(() => { checkSuperAdmin(); }, []);
@@ -255,10 +267,12 @@ export default function AdminScreen() {
     setEditUserName(member.user_profiles?.display_name || '');
     setEditUserEmail(member.user_profiles?.email || '');
     setEditUserPosition(member.user_profiles?.position || '');
-    setEditUserPhone('');
+    setEditUserPhone(member.user_profiles?.phone || '');
     setEditUserRole(member.role);
     setEditUserPassword('');
     setEditUserIsSuperAdmin(member.role === 'SUPER_ADMIN');
+    setEditUserWorkStart(member.user_profiles?.work_start_time || '');
+    setEditUserWorkEnd(member.user_profiles?.work_end_time || '');
     setShowEditUser(true);
   }
 
@@ -268,6 +282,16 @@ export default function AdminScreen() {
     }
     if (editUserPassword && editUserPassword.length < 6) {
       Alert.alert('Erro', 'Senha deve ter no mínimo 6 caracteres'); return;
+    }
+    if (canManageWorkingHours) {
+      const hasStart = !!editUserWorkStart.trim();
+      const hasEnd = !!editUserWorkEnd.trim();
+      if (hasStart !== hasEnd) {
+        Alert.alert('Erro', 'Informe os dois horários ou deixe ambos vazios'); return;
+      }
+      if (hasStart && (!isValidWorkingHoursInput(editUserWorkStart.trim()) || !isValidWorkingHoursInput(editUserWorkEnd.trim()))) {
+        Alert.alert('Erro', 'Use o formato HH:mm para os horários'); return;
+      }
     }
     setSavingEditUser(true);
     try {
@@ -280,6 +304,10 @@ export default function AdminScreen() {
         role: editUserRole,
         company_id: currentCompanyId,
         is_super_admin: editUserRole === 'SUPER_ADMIN' ? 'true' : 'false',
+        ...(canManageWorkingHours ? {
+          work_start_time: editUserWorkStart.trim(),
+          work_end_time: editUserWorkEnd.trim(),
+        } : {}),
       });
       Alert.alert('Sucesso', 'Usuário atualizado');
       setShowEditUser(false);
@@ -565,6 +593,11 @@ export default function AdminScreen() {
                   <Text style={styles.memberEmail}>{member.user_profiles?.email || '-'}</Text>
                   {member.user_profiles?.position && (
                     <Text style={styles.memberPosition}>{member.user_profiles.position}</Text>
+                  )}
+                  {member.user_profiles?.work_start_time && member.user_profiles?.work_end_time && (
+                    <Text style={styles.memberPosition}>
+                      Horário: {member.user_profiles.work_start_time} - {member.user_profiles.work_end_time}
+                    </Text>
                   )}
                 </View>
                 <View style={[styles.roleChip, { backgroundColor: ROLE_COLORS[member.role] + '20' }]}>
@@ -1047,6 +1080,34 @@ export default function AdminScreen() {
             <TextInput style={styles.modalInput} placeholder="Mín. 6 caracteres" placeholderTextColor={colors.textMuted}
               value={editUserPassword} onChangeText={setEditUserPassword} secureTextEntry autoCorrect={false} autoComplete="off" />
 
+            {canManageWorkingHours && (
+              <>
+                <Text style={styles.fieldLabel}>HORÁRIO DE TRABALHO</Text>
+                <Text style={styles.hintText}>Deixe os dois campos vazios para não restringir o usuário.</Text>
+                <View style={styles.timeRow}>
+                  <TextInput
+                    style={[styles.modalInput, styles.timeInput]}
+                    placeholder="08:00"
+                    placeholderTextColor={colors.textMuted}
+                    value={editUserWorkStart}
+                    onChangeText={setEditUserWorkStart}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                  />
+                  <Text style={styles.timeSeparator}>até</Text>
+                  <TextInput
+                    style={[styles.modalInput, styles.timeInput]}
+                    placeholder="18:00"
+                    placeholderTextColor={colors.textMuted}
+                    value={editUserWorkEnd}
+                    onChangeText={setEditUserWorkEnd}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                  />
+                </View>
+              </>
+            )}
+
             <Text style={styles.fieldLabel}>FUNÇÃO NA EMPRESA</Text>
             <View style={styles.roleSelector}>
               {ROLE_ORDER.map(role => (
@@ -1149,6 +1210,9 @@ const styles = StyleSheet.create({
   memberName: { fontSize: 14, fontWeight: '600', color: colors.text },
   memberEmail: { fontSize: 12, color: colors.textMuted },
   memberPosition: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  timeInput: { flex: 1, marginBottom: 0 },
+  timeSeparator: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   roleChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   roleText: { fontSize: 11, fontWeight: '700' },
   // Chats

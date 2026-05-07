@@ -37,6 +37,7 @@ import com.kanux.repository.ChatMemberRepository;
 import com.kanux.repository.ChatRepository;
 import com.kanux.repository.MessageRepository;
 import com.kanux.repository.UserProfileRepository;
+import com.kanux.service.WorkingHoursService;
 
 @RestController
 @RequestMapping("/api/chats")
@@ -49,6 +50,7 @@ public class ChatController {
     private final SimpMessagingTemplate messagingTemplate;
     private final PushNotificationService pushNotificationService;
     private final PresenceEventListener presenceEventListener;
+    private final WorkingHoursService workingHoursService;
 
     // chatId -> (userId -> timestamp da última digitação em ms)
     private final Map<UUID, Map<UUID, Long>> typingMap = new ConcurrentHashMap<>();
@@ -57,7 +59,8 @@ public class ChatController {
                           MessageRepository messageRepository, UserProfileRepository userProfileRepository,
                           SimpMessagingTemplate messagingTemplate,
                           PushNotificationService pushNotificationService,
-                          PresenceEventListener presenceEventListener) {
+                          PresenceEventListener presenceEventListener,
+                          WorkingHoursService workingHoursService) {
         this.chatRepository = chatRepository;
         this.chatMemberRepository = chatMemberRepository;
         this.messageRepository = messageRepository;
@@ -65,6 +68,7 @@ public class ChatController {
         this.messagingTemplate = messagingTemplate;
         this.pushNotificationService = pushNotificationService;
         this.presenceEventListener = presenceEventListener;
+        this.workingHoursService = workingHoursService;
     }
 
     @SuppressWarnings("null")
@@ -150,6 +154,7 @@ public class ChatController {
             @AuthenticationPrincipal UserProfile p, @PathVariable String chatId,
             @RequestBody SendMessageRequest req) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
+        workingHoursService.ensureAllowed(p, "enviar mensagens");
         // conteúdo obrigatório apenas para mensagens de texto; mídia pode ter content vazio
         boolean isTextMessage = req.getMessageType() == null || "text".equals(req.getMessageType());
         if (isTextMessage && (req.getContent() == null || req.getContent().isBlank()))
@@ -194,6 +199,7 @@ public class ChatController {
             @AuthenticationPrincipal UserProfile p, @PathVariable String chatId,
             @RequestBody Map<String, Object> body) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
+        workingHoursService.ensureAllowed(p, "enviar mensagens");
         boolean typing = false;
         if (body != null && body.containsKey("typing")) {
             try { typing = Boolean.parseBoolean(String.valueOf(body.get("typing"))); } catch (Exception ignored) {}

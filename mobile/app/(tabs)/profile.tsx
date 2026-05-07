@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, TextInput, Modal, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, TextInput, Modal, Image, ActivityIndicator, Switch } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,9 +8,11 @@ import { api } from '../../src/lib/api';
 import { ENV } from '../../src/lib/env';
 import { supabase } from '../../src/lib/supabase';
 import { colors, spacing } from '../../src/theme';
+import { useTheme, AppThemeMode } from '../../src/contexts/ThemeContext';
 
 export default function ProfileScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const { themeMode, setThemeMode, isDark } = useTheme();
   const router = useRouter();
 
   const isSuperAdmin = profile?.is_super_admin === true;
@@ -250,6 +252,54 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Seção Aparência / Tema */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Aparência</Text>
+
+        {/* Seleção Preto / Branco */}
+        <View style={styles.themeRow}>
+          <TouchableOpacity
+            style={[styles.themeButton, themeMode === 'dark' && styles.themeButtonActive]}
+            onPress={() => setThemeMode('dark')}
+          >
+            <View style={[styles.themeCircle, { backgroundColor: '#000000' }]}>
+              {themeMode === 'dark' && <Ionicons name="checkmark" size={18} color="#FFFFFF" />}
+            </View>
+            <Text style={[styles.themeLabel, themeMode === 'dark' && styles.themeLabelActive]}>Preto</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.themeButton, themeMode === 'light' && styles.themeButtonActive]}
+            onPress={() => setThemeMode('light')}
+          >
+            <View style={[styles.themeCircle, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border }]}>
+              {themeMode === 'light' && <Ionicons name="checkmark" size={18} color="#000000" />}
+            </View>
+            <Text style={[styles.themeLabel, themeMode === 'light' && styles.themeLabelActive]}>Branco</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Toggle Auto-Tema */}
+        <View style={styles.autoThemeRow}>
+          <View style={styles.autoThemeInfo}>
+            <Ionicons name="partly-sunny" size={20} color={colors.warning} />
+            <View>
+              <Text style={styles.autoThemeLabel}>Desligar Auto-Tema</Text>
+              <Text style={styles.autoThemeHint}>Tema automático muda com o clima</Text>
+            </View>
+          </View>
+          <Switch
+            value={themeMode !== 'auto'}
+            onValueChange={(val) => {
+              if (!val) setThemeMode('auto');
+              else setThemeMode(isDark ? 'dark' : 'light');
+            }}
+            trackColor={{ false: colors.primary + '80', true: colors.border }}
+            thumbColor={themeMode !== 'auto' ? colors.text : colors.primary}
+          />
+        </View>
+      </View>
+
       <TouchableOpacity
         style={styles.signOutButton}
         onPress={handleSignOut}
@@ -354,5 +404,23 @@ const styles = StyleSheet.create({
   modalCancelText: { color: colors.textSecondary, fontWeight: '600', fontSize: 16 },
   modalSaveButton: { flex: 1, padding: spacing.md, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' },
   modalSaveText: { color: colors.text, fontWeight: '600', fontSize: 16 },
+  // Tema / Aparência
+  themeRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  themeButton: {
+    flex: 1, backgroundColor: colors.surface, borderRadius: 12,
+    padding: spacing.md, alignItems: 'center', gap: spacing.sm,
+    borderWidth: 2, borderColor: 'transparent',
+  },
+  themeButtonActive: { borderColor: colors.primary },
+  themeCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  themeLabel: { fontSize: 14, color: colors.textSecondary, fontWeight: '500' },
+  themeLabelActive: { color: colors.text, fontWeight: '700' },
+  autoThemeRow: {
+    backgroundColor: colors.surface, borderRadius: 12, padding: spacing.md,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  autoThemeInfo: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  autoThemeLabel: { fontSize: 15, color: colors.text, fontWeight: '500' },
+  autoThemeHint: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
 });
 

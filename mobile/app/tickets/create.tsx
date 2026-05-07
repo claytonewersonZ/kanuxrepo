@@ -6,9 +6,12 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { getUserCompanies, createTicket, Company, getDepartments, Department, getCompanyMembers, Profile } from '../../src/lib/supabase';
 import { getUserCompany, saveUserCompany } from '../../src/lib/offlineStorage';
 import { colors, spacing, borderRadius } from '../../src/theme';
+import { getWorkingHoursRestrictionMessage } from '../../src/lib/workingHours';
+import { useWebSocket } from '../../src/contexts/WebSocketContext';
 
 export default function CreateTicketScreen() {
   const { profile } = useAuth();
+  const { createTicketWs, isConnected } = useWebSocket();
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -21,6 +24,8 @@ export default function CreateTicketScreen() {
   const [members, setMembers] = useState<Profile[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [loadingCompany, setLoadingCompany] = useState(true);
+  const workingHoursMessage = getWorkingHoursRestrictionMessage(profile, 'abrir chamados');
+  const blockedByWorkingHours = !!workingHoursMessage;
 
   useEffect(() => {
     (async () => {
@@ -64,11 +69,37 @@ export default function CreateTicketScreen() {
   }
 
   async function handleCreate() {
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage); return;
+    }
     if (!title.trim()) { Alert.alert('Erro', 'Informe o título do chamado'); return; }
     if (!companyId) { Alert.alert('Erro', 'Nenhuma empresa encontrada'); return; }
     if (!selectedDepartmentId) { Alert.alert('Erro', 'Selecione o departamento (obrigatório)'); return; }
 
     setLoading(true);
+
+    // Tenta criar via WebSocket primeiro
+    if (isConnected) {
+      const wsPayload = {
+        companyId,
+        title: title.trim(),
+        description: description.trim() || undefined,
+        priority,
+        departmentId: selectedDepartmentId || undefined,
+        assigneeProfileId: selectedUserId || undefined,
+      };
+      const sent = createTicketWs(wsPayload, (result) => {
+        setLoading(false);
+        if (result.success) {
+          Alert.alert('Sucesso', 'Chamado criado com sucesso!', [{ text: 'OK', onPress: () => router.back() }]);
+        } else {
+          Alert.alert('Erro', result.error || 'Falha ao criar chamado');
+        }
+      });
+      if (sent) return;
+    }
+
+    // Fallback REST
     try {
       const ticket = await createTicket(companyId, title.trim(), description.trim(), priority, selectedDepartmentId || undefined);
       if (ticket) {
@@ -223,7 +254,7 @@ export default function CreateTicketScreen() {
         <TouchableOpacity
           style={[styles.submitButton, loading && styles.submitButtonDisabled]}
           onPress={handleCreate}
-          disabled={loading}
+          disabled={loading || blockedByWorkingHours}
         >
           {loading ? (
             <ActivityIndicator color={colors.text} />
@@ -234,6 +265,7 @@ export default function CreateTicketScreen() {
             </View>
           )}
         </TouchableOpacity>
+        {blockedByWorkingHours && <Text style={styles.emptyHint}>{workingHoursMessage}</Text>}
       </View>
     </ScrollView>
   );

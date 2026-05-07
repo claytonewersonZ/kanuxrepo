@@ -1,7 +1,9 @@
 package com.kanux.controller;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,6 +57,7 @@ import com.kanux.repository.UserProfileRepository;
 public class AdminController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminController.class);
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     @Value("${supabase.url:}")
     private String supabaseUrl;
@@ -127,9 +130,16 @@ public class AdminController {
             map.put("screen_permissions", m.getScreenPermissions() != null ? m.getScreenPermissions() : "{}");
             if (m.getUserProfile() != null) {
                 UserProfile up = m.getUserProfile();
+                String workStart = formatLocalTime(up.getWorkStartTime());
+                String workEnd = formatLocalTime(up.getWorkEndTime());
                 map.put("user_profiles", Map.of(
                         "id", up.getId(), "display_name", String.valueOf(up.getDisplayName()),
-                        "email", String.valueOf(up.getEmail()), "avatar_url", String.valueOf(up.getAvatarUrl())));
+                        "email", String.valueOf(up.getEmail()),
+                        "avatar_url", String.valueOf(up.getAvatarUrl()),
+                        "position", up.getPosition() != null ? up.getPosition() : "",
+                        "phone", up.getPhone() != null ? up.getPhone() : "",
+                        "work_start_time", workStart != null ? workStart : "",
+                        "work_end_time", workEnd != null ? workEnd : ""));
             }
             return map;
         }).collect(Collectors.toList());
@@ -355,6 +365,9 @@ public class AdminController {
             @PathVariable String profileId,
             @RequestBody Map<String, String> body) {
         if (!isAdminOrAbove(p)) return forbidden();
+        if ((body.containsKey("work_start_time") || body.containsKey("work_end_time")) && !isSuperAdmin(p)) {
+            return forbidden();
+        }
 
         return userProfileRepository.findById(UUID.fromString(profileId)).map(profile -> {
             // Atualiza os campos básicos do perfil
@@ -364,6 +377,12 @@ public class AdminController {
             if (body.containsKey("phone")) profile.setPhone(body.get("phone"));
             if (body.containsKey("department")) profile.setDepartment(body.get("department"));
             if (body.containsKey("is_super_admin")) profile.setSuperAdmin("true".equals(body.get("is_super_admin")));
+            if (body.containsKey("work_start_time")) profile.setWorkStartTime(parseLocalTime(body.get("work_start_time")));
+            if (body.containsKey("work_end_time")) profile.setWorkEndTime(parseLocalTime(body.get("work_end_time")));
+            if ((profile.getWorkStartTime() == null) != (profile.getWorkEndTime() == null)) {
+                return ResponseEntity.badRequest().body(ApiResponse.<Map<String, Object>>fail(
+                        "Informe os dois horários ou deixe ambos vazios"));
+            }
             userProfileRepository.save(profile);
 
             // Atualiza a função na empresa, se informada
@@ -492,10 +511,23 @@ public class AdminController {
             map.put("phone", up.getPhone());
             map.put("position", up.getPosition());
             map.put("is_super_admin", up.isSuperAdmin());
+            map.put("work_start_time", formatLocalTime(up.getWorkStartTime()));
+            map.put("work_end_time", formatLocalTime(up.getWorkEndTime()));
             map.put("created_at", up.getCreatedAt());
             return map;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    private String formatLocalTime(LocalTime value) {
+        return value != null ? value.format(TIME_FORMATTER) : null;
+    }
+
+    private LocalTime parseLocalTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return LocalTime.parse(value.trim(), TIME_FORMATTER);
     }
 
     // ── Supabase Auth helpers ───────────────────────────────────────────────

@@ -4,10 +4,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MediaPreviewModal } from '../../src/components/MediaPreviewModal';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useWebSocket } from '../../src/contexts/WebSocketContext';
-import { Ticket, TicketComment, getTicketComments, addTicketComment, updateTicketStatus, getUserProfile, supabase } from '../../src/lib/supabase';
+import { Ticket, TicketComment, getTicketComments, supabase } from '../../src/lib/supabase';
 import { api } from '../../src/lib/api';
 import { ENV } from '../../src/lib/env';
 import { colors, spacing } from '../../src/theme';
+import { getWorkingHoursRestrictionMessage } from '../../src/lib/workingHours';
 import * as ImagePicker from 'expo-image-picker';
 
 const TICKET_IMAGE_PREFIX = '[image]:';
@@ -22,7 +23,7 @@ function getImageUrlFromComment(content?: string): string | null {
 export default function TicketScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, profile } = useAuth();
-  const { subscribeTicketComments } = useWebSocket();
+  const { subscribeTicketComments, subscribeTicketUpdates, sendTicketCommentWs, updateTicketWs } = useWebSocket();
   const router = useRouter();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<any[]>([]);
@@ -32,6 +33,8 @@ export default function TicketScreen() {
   const [showInfo, setShowInfo] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const workingHoursMessage = getWorkingHoursRestrictionMessage(profile, 'responder chamados');
+  const blockedByWorkingHours = !!workingHoursMessage;
 
   function appendComment(comment: any) {
     setComments(prev => {
@@ -71,10 +74,6 @@ export default function TicketScreen() {
     }
   }
 
-  // Ref estável para loadComments — evita stale closure no Realtime
-  const loadCommentsRef = useRef(loadComments);
-  useEffect(() => { loadCommentsRef.current = loadComments; });
-
   useEffect(() => {
     loadData();
   }, [id]);
@@ -86,12 +85,23 @@ export default function TicketScreen() {
     });
   }, [id, subscribeTicketComments]);
 
-  // Polling de fallback: atualiza comentários periodicamente para recuperar mensagens perdidas.
   useEffect(() => {
     if (!id) return;
-    const interval = setInterval(() => { loadCommentsRef.current(); }, 15000);
-    return () => clearInterval(interval);
-  }, [id]);
+    return subscribeTicketUpdates(id, (updatedTicket) => {
+      setTicket(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: updatedTicket.status,
+          priority: updatedTicket.priority,
+          title: updatedTicket.title,
+          description: updatedTicket.description ?? null,
+          updated_at: updatedTicket.updatedAt,
+          resolved_at: updatedTicket.resolvedAt ?? null,
+        } as Ticket;
+      });
+    });
+  }, [id, subscribeTicketUpdates]);
 
   useEffect(() => {
     if (comments.length > 0) {
@@ -101,14 +111,19 @@ export default function TicketScreen() {
 
   async function handleAddComment() {
     if (!newComment.trim() || !id || submitting) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
     
     setSubmitting(true);
     try {
-      const comment = await addTicketComment(id, newComment.trim());
-      if (comment) {
-        appendComment(comment);
-        setNewComment('');
+      const sent = sendTicketCommentWs(id, newComment.trim());
+      if (!sent) {
+        Alert.alert('WebSocket desconectado', 'Conecte-se novamente para enviar comentários em tempo real.');
+        return;
       }
+      setNewComment('');
     } catch (error) {
       console.error('Error adding comment:', error);
     } finally {
@@ -155,6 +170,10 @@ export default function TicketScreen() {
 
   async function handlePickPhoto() {
     if (!id || submitting) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -181,9 +200,9 @@ export default function TicketScreen() {
         return;
       }
 
-      const comment = await addTicketComment(id, `${TICKET_IMAGE_PREFIX}${url}`);
-      if (comment) {
-        appendComment(comment);
+      const sent = sendTicketCommentWs(id, `${TICKET_IMAGE_PREFIX}${url}`);
+      if (!sent) {
+        Alert.alert('WebSocket desconectado', 'Conecte-se novamente para enviar comentários em tempo real.');
       }
     } catch (error) {
       console.error('Erro ao adicionar foto no ticket:', error);
@@ -194,14 +213,15 @@ export default function TicketScreen() {
 
   async function handleStatusChange(newStatus: string) {
     if (!ticket || !id) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
     
     try {
-      const updated = await updateTicketStatus(
-        id,
-        newStatus as 'OPEN' | 'PENDING' | 'RESOLVED' | 'CLOSED'
-      );
-      if (updated) {
-        setTicket(updated);
+      const sent = updateTicketWs(id, { status: newStatus });
+      if (!sent) {
+        Alert.alert('WebSocket desconectado', 'Conecte-se novamente para atualizar o ticket em tempo real.');
       }
     } catch (error) {
       console.error('Error updating status:', error);
@@ -210,14 +230,15 @@ export default function TicketScreen() {
 
   async function handlePriorityChange(newPriority: string) {
     if (!ticket || !id) return;
+    if (blockedByWorkingHours) {
+      Alert.alert('Fora do horário', workingHoursMessage);
+      return;
+    }
     
     try {
-      const result = await api.updateTicket({
-        id,
-        priority: newPriority,
-      });
-      if (result?.data) {
-        setTicket(result.data);
+      const sent = updateTicketWs(id, { priority: newPriority });
+      if (!sent) {
+        Alert.alert('WebSocket desconectado', 'Conecte-se novamente para atualizar o ticket em tempo real.');
       }
     } catch (error) {
       console.error('Erro ao atualizar prioridade:', error);
@@ -264,6 +285,12 @@ export default function TicketScreen() {
           {/* Painel de Info expandível */}
           {showInfo && (
             <View style={styles.infoPanel}>
+              {blockedByWorkingHours && (
+                <View style={styles.infoSection}>
+                  <Text style={styles.infoLabel}>Bloqueio de horário</Text>
+                  <Text style={styles.infoValue}>{workingHoursMessage}</Text>
+                </View>
+              )}
               {/* Descrição */}
               {ticket.description ? (
                 <View style={styles.infoSection}>
@@ -285,6 +312,7 @@ export default function TicketScreen() {
                         { backgroundColor: getStatusColor(status) }
                       ]}
                       onPress={() => handleStatusChange(status)}
+                      disabled={blockedByWorkingHours}
                     >
                       <Text style={styles.actionChipText}>{getStatusLabel(status)}</Text>
                     </TouchableOpacity>
@@ -305,6 +333,7 @@ export default function TicketScreen() {
                         { backgroundColor: getPriorityColor(priority) }
                       ]}
                       onPress={() => handlePriorityChange(priority)}
+                      disabled={blockedByWorkingHours}
                     >
                       <Text style={styles.actionChipText}>{getPriorityLabel(priority)}</Text>
                     </TouchableOpacity>
@@ -369,11 +398,12 @@ export default function TicketScreen() {
               onChangeText={setNewComment}
               multiline
               maxLength={1000}
+              editable={!blockedByWorkingHours}
             />
             <TouchableOpacity
               style={[styles.sendButton, (!newComment.trim() || submitting) && styles.sendButtonDisabled]}
               onPress={handleAddComment}
-              disabled={!newComment.trim() || submitting}
+              disabled={!newComment.trim() || submitting || blockedByWorkingHours}
             >
               {submitting ? (
                 <ActivityIndicator size="small" color={colors.text} />
