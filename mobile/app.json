@@ -24,11 +24,18 @@
       },
       "package": "com.kanux.mobile",
       "versionCode": 1005,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "pan"
     },
     "plugins": [
-  "expo-router"
-],
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "androidMode": "default",
+          "androidCollapsedTitle": "Mensagens"
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     },
