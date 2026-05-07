@@ -129,7 +129,7 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(undefin
 // ── Provider ───────────────────────────────────────────────────────────────────
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-  const { profile, isOnline } = useAuth();
+  const { user, isOnline } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
 
   const clientRef = useRef<Client | null>(null);
@@ -160,7 +160,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const connect = useCallback(async () => {
-    if (!profile || !isOnline) return;
+    if (!user || !isOnline) return;
     if (clientRef.current?.active) return;
 
     // Obter token JWT fresco
@@ -199,7 +199,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
     clientRef.current = client;
     client.activate();
-  }, [getWsUrl, isOnline, profile]);
+  }, [getWsUrl, isOnline, user]);
 
   function resubscribeAll(client: Client) {
     stompSubsRef.current.clear();
@@ -358,7 +358,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   // Conecta quando o usuário fizer login
   useEffect(() => {
-    if (profile && isOnline) {
+    if (user && isOnline) {
       connect();
     } else {
       clientRef.current?.deactivate();
@@ -366,7 +366,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       setIsConnected(false);
       stompSubsRef.current.clear();
     }
-  }, [connect, isOnline, profile]);
+  }, [connect, isOnline, user]);
 
   // Cleanup ao desmontar
   useEffect(() => {

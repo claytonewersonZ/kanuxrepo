@@ -63,7 +63,7 @@ export default function LoginScreen() {
             <Text style={styles.inputLabel}>Senha</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
-              <TextInput style={styles.inputWithIcon} placeholder="••••••*•" placeholderTextColor={colors.textMuted}
+              <TextInput style={styles.inputWithIcon} placeholder="********" placeholderTextColor={colors.textMuted}
                 value={password} onChangeText={setPassword} secureTextEntry={!showPassword} autoCorrect={false} autoComplete="off" />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
