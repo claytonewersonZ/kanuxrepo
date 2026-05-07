@@ -8,11 +8,11 @@ import { api } from '../../src/lib/api';
 import { ENV } from '../../src/lib/env';
 import { supabase } from '../../src/lib/supabase';
 import { colors, spacing } from '../../src/theme';
-import { useTheme, AppThemeMode } from '../../src/contexts/ThemeContext';
+import { useTheme } from '../../src/contexts/ThemeContext';
 
 export default function ProfileScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
-  const { themeMode, setThemeMode, isDark } = useTheme();
+  const { themeMode, setThemeMode, lastManualMode } = useTheme();
   const router = useRouter();
 
   const isSuperAdmin = profile?.is_super_admin === true;
@@ -292,7 +292,7 @@ export default function ProfileScreen() {
             value={themeMode !== 'auto'}
             onValueChange={(val) => {
               if (!val) setThemeMode('auto');
-              else setThemeMode(isDark ? 'dark' : 'light');
+              else setThemeMode(lastManualMode);
             }}
             trackColor={{ false: colors.primary + '80', true: colors.border }}
             thumbColor={themeMode !== 'auto' ? colors.text : colors.primary}

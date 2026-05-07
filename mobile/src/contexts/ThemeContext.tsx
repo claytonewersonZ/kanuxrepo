@@ -52,6 +52,7 @@ const LIGHT_COLORS: AppThemeColors = {
 interface ThemeContextType {
   themeMode: AppThemeMode;
   setThemeMode: (mode: AppThemeMode) => void;
+  lastManualMode: Exclude<AppThemeMode, 'auto'>;
   themeColors: AppThemeColors;
   isDark: boolean;
   weather: WeatherData | null;
@@ -62,9 +63,11 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const STORAGE_KEY = '@kanux_theme_mode';
+const LAST_MANUAL_STORAGE_KEY = '@kanux_last_manual_theme_mode';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeModeState] = useState<AppThemeMode>('auto');
+  const [lastManualMode, setLastManualMode] = useState<Exclude<AppThemeMode, 'auto'>>('dark');
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
 
@@ -73,6 +76,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     AsyncStorage.getItem(STORAGE_KEY).then((val) => {
       if (val === 'auto' || val === 'light' || val === 'dark') {
         setThemeModeState(val);
+      }
+    }).catch(() => {});
+
+    AsyncStorage.getItem(LAST_MANUAL_STORAGE_KEY).then((val) => {
+      if (val === 'light' || val === 'dark') {
+        setLastManualMode(val);
       }
     }).catch(() => {});
   }, []);
@@ -96,6 +105,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setThemeMode = useCallback((mode: AppThemeMode) => {
     setThemeModeState(mode);
     AsyncStorage.setItem(STORAGE_KEY, mode).catch(() => {});
+
+    if (mode === 'light' || mode === 'dark') {
+      setLastManualMode(mode);
+      AsyncStorage.setItem(LAST_MANUAL_STORAGE_KEY, mode).catch(() => {});
+    }
   }, []);
 
   // Determine if dark based on mode
@@ -114,6 +128,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     <ThemeContext.Provider value={{
       themeMode,
       setThemeMode,
+      lastManualMode,
       themeColors,
       isDark,
       weather,
