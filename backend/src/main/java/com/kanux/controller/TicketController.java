@@ -3,12 +3,15 @@ package com.kanux.controller;
 import com.kanux.dto.ApiResponse;
 import com.kanux.dto.CreateTicketRequest;
 import com.kanux.dto.UpdateTicketRequest;
+import com.kanux.config.PushNotificationService;
 import com.kanux.entity.Ticket;
 import com.kanux.entity.TicketComment;
 import com.kanux.entity.UserProfile;
 import com.kanux.repository.TicketCommentRepository;
 import com.kanux.repository.TicketRepository;
 import com.kanux.service.WorkingHoursService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,20 +27,25 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/tickets")
 public class TicketController {
 
+    private static final Logger log = LoggerFactory.getLogger(TicketController.class);
+
     private final TicketRepository ticketRepository;
     private final TicketCommentRepository commentRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final WorkingHoursService workingHoursService;
+    private final PushNotificationService pushNotificationService;
 
     public TicketController(
             TicketRepository ticketRepository,
             TicketCommentRepository commentRepository,
             SimpMessagingTemplate messagingTemplate,
-            WorkingHoursService workingHoursService) {
+            WorkingHoursService workingHoursService,
+            PushNotificationService pushNotificationService) {
         this.ticketRepository = ticketRepository;
         this.commentRepository = commentRepository;
         this.messagingTemplate = messagingTemplate;
         this.workingHoursService = workingHoursService;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @GetMapping
@@ -77,6 +85,11 @@ public class TicketController {
         ticket.setPriority(req.getPriority() != null ? Ticket.TicketPriority.valueOf(req.getPriority().trim().toUpperCase()) : Ticket.TicketPriority.MEDIUM);
         ticket.setStatus(Ticket.TicketStatus.OPEN);
         ticket = ticketRepository.save(ticket);
+        try {
+            messagingTemplate.convertAndSend("/topic/company/" + ticket.getCompanyId() + "/tickets", ticket);
+        } catch (RuntimeException e) {
+            log.warn("[WS] Falha ao publicar criação do ticket {}: {}", ticket.getId(), e.getMessage());
+        }
         return ResponseEntity.ok(ApiResponse.ok(ticket));
     }
 
@@ -87,17 +100,40 @@ public class TicketController {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
         workingHoursService.ensureAllowed(p, "atualizar chamados");
         return ticketRepository.findById(UUID.fromString(req.getId())).map(t -> {
+            UUID previousAssigneeId = t.getAssigneeProfileId();
+            UUID newAssigneeId = previousAssigneeId;
             if (req.getTitle()       != null) t.setTitle(req.getTitle());
             if (req.getDescription() != null) t.setDescription(req.getDescription());
             if (req.getPriority()    != null) t.setPriority(Ticket.TicketPriority.valueOf(req.getPriority().trim().toUpperCase()));
             if (req.getDepartmentId()      != null) t.setDepartmentId(UUID.fromString(req.getDepartmentId()));
-            if (req.getAssigneeProfileId() != null) t.setAssigneeProfileId(UUID.fromString(req.getAssigneeProfileId()));
+            if (req.getAssigneeProfileId() != null) {
+                newAssigneeId = UUID.fromString(req.getAssigneeProfileId());
+                t.setAssigneeProfileId(newAssigneeId);
+            }
             if (req.getStatus() != null) {
                 Ticket.TicketStatus s = Ticket.TicketStatus.valueOf(req.getStatus().trim().toUpperCase());
                 t.setStatus(s);
                 if (s == Ticket.TicketStatus.RESOLVED && t.getResolvedAt() == null) t.setResolvedAt(Instant.now());
             }
-            return ResponseEntity.ok(ApiResponse.ok(ticketRepository.save(t)));
+            Ticket saved = ticketRepository.save(t);
+            try {
+                messagingTemplate.convertAndSend("/topic/ticket/" + saved.getId() + "/updated", saved);
+            } catch (RuntimeException e) {
+                log.warn("[WS] Falha ao publicar atualização do ticket {}: {}", saved.getId(), e.getMessage());
+            }
+            try {
+                messagingTemplate.convertAndSend("/topic/company/" + saved.getCompanyId() + "/tickets", saved);
+            } catch (RuntimeException e) {
+                log.warn("[WS] Falha ao publicar lista de tickets da empresa {}: {}", saved.getCompanyId(), e.getMessage());
+            }
+            if (newAssigneeId != null && !newAssigneeId.equals(previousAssigneeId)) {
+                pushNotificationService.notifyTicketAssigned(
+                        saved.getId(),
+                        newAssigneeId,
+                        saved.getTitle(),
+                        saved.getCompanyId() != null ? saved.getCompanyId().toString() : null);
+            }
+            return ResponseEntity.ok(ApiResponse.ok(saved));
         }).orElse(ResponseEntity.notFound().build());
     }
 

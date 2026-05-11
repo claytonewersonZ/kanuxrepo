@@ -3,8 +3,10 @@ package com.kanux.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kanux.controller.ChatWebSocketController;
 import com.kanux.entity.CompanyMember;
+import com.kanux.entity.UserProfile;
 import com.kanux.repository.ChatMemberRepository;
 import com.kanux.repository.CompanyMemberRepository;
+import com.kanux.repository.UserProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -40,14 +42,17 @@ public class PushNotificationService {
 
     private final CompanyMemberRepository companyMemberRepository;
     private final ChatMemberRepository chatMemberRepository;
+    private final UserProfileRepository userProfileRepository;
     private final ChatWebSocketController chatWebSocketController;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public PushNotificationService(CompanyMemberRepository companyMemberRepository,
                                     ChatMemberRepository chatMemberRepository,
+                                    UserProfileRepository userProfileRepository,
                                     @Lazy ChatWebSocketController chatWebSocketController) {
         this.companyMemberRepository = companyMemberRepository;
         this.chatMemberRepository = chatMemberRepository;
+        this.userProfileRepository = userProfileRepository;
         this.chatWebSocketController = chatWebSocketController;
     }
 
@@ -206,4 +211,50 @@ public class PushNotificationService {
         } catch (java.io.IOException | InterruptedException e) {
             log.warn("[Push] Falha ao enviar push de mensagem: {}", e.getMessage());
         }
-    }}
+    }
+
+    @Async
+    public void notifyTicketAssigned(UUID ticketId, UUID assigneeProfileId, String ticketTitle, String companyId) {
+        if (ticketId == null || assigneeProfileId == null) return;
+        try {
+            UserProfile assignee = userProfileRepository.findById(assigneeProfileId).orElse(null);
+            if (assignee == null) return;
+            String pushToken = assignee.getPushToken();
+            if (pushToken == null || pushToken.isBlank()) return;
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("ticketId", ticketId.toString());
+            data.put("companyId", companyId);
+
+            Map<String, Object> msg = new LinkedHashMap<>();
+            msg.put("to", pushToken);
+            msg.put("title", "📋 Ticket atribuído a você");
+            msg.put("body", ticketTitle != null ? ticketTitle : "");
+            msg.put("data", data);
+            msg.put("sound", "default");
+            msg.put("priority", "high");
+
+            String jsonBody = objectMapper.writeValueAsString(List.of(msg));
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .build();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(EXPO_PUSH_URL))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .timeout(Duration.ofSeconds(15))
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                log.warn("[Push] Expo API (ticket assigned) retornou {}: {}", response.statusCode(),
+                        truncate(response.body(), 200));
+            }
+        } catch (java.io.IOException e) {
+            log.warn("[Push] Falha ao enviar push de ticket atribuído: {}", e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("[Push] Envio de push de ticket atribuído interrompido: {}", e.getMessage());
+        }
+    }
+}

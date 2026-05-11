@@ -57,7 +57,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         config.setApplicationDestinationPrefixes("/app");
 
         // Broker em memória para tópicos e fila de usuário específico
-        config.enableSimpleBroker("/topic", "/queue");
+        config.enableSimpleBroker("/topic", "/queue")
+                .setHeartbeatValue(new long[]{10000, 10000});
 
         // Destinos específicos de usuário (notificações privadas)
         config.setUserDestinationPrefix("/user");

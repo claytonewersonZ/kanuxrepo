@@ -298,6 +298,15 @@ public class ChatController {
         result.put("user_profile_id", saved.getUserProfileId());
         result.put("role", saved.getRole());
         result.put("joined_at", saved.getJoinedAt());
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("action", "added");
+            payload.put("member", result);
+            messagingTemplate.convertAndSend("/topic/chat/" + cId + "/members", payload);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ChatController.class)
+                    .warn("[WS] Falha ao notificar membros adicionados do chat {}: {}", cId, e.getMessage());
+        }
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
@@ -307,8 +316,18 @@ public class ChatController {
             @AuthenticationPrincipal UserProfile p, @PathVariable String chatId,
             @PathVariable String userProfileId) {
         if (p == null) return ResponseEntity.status(401).body(ApiResponse.fail("Não autorizado"));
-        chatMemberRepository.deleteByChatIdAndUserProfileId(
-                UUID.fromString(chatId), UUID.fromString(userProfileId));
+        UUID cId = UUID.fromString(chatId);
+        UUID uId = UUID.fromString(userProfileId);
+        chatMemberRepository.deleteByChatIdAndUserProfileId(cId, uId);
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("action", "removed");
+            payload.put("user_profile_id", uId.toString());
+            messagingTemplate.convertAndSend("/topic/chat/" + cId + "/members", payload);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ChatController.class)
+                    .warn("[WS] Falha ao notificar remoção de membro no chat {}: {}", cId, e.getMessage());
+        }
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 

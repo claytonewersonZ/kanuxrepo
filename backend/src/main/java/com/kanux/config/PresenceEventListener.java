@@ -63,9 +63,7 @@ public class PresenceEventListener {
 
         // Buscar chats do usuário e fazer broadcast online
         try {
-            var memberships = chatMemberRepository.findAll().stream()
-                    .filter(cm -> cm.getUserProfileId().equals(userId))
-                    .toList();
+            var memberships = chatMemberRepository.findByUserProfileId(userId);
             Set<UUID> chatIds = ConcurrentHashMap.newKeySet();
             for (var m : memberships) {
                 chatIds.add(m.getChatId());
@@ -120,5 +118,9 @@ public class PresenceEventListener {
             }
         }
         return online;
+    }
+
+    public boolean isUserOnline(UUID userId) {
+        return userChats.containsKey(userId);
     }
 }
