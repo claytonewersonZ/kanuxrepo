@@ -14,7 +14,9 @@ async function getNotificationsModule() {
 
 /**
  * Estado global de mensagens não lidas compartilhado entre múltiplas telas/hooks.
- * É resetado quando o perfil autenticado muda e sincronizado por listeners internos.
+ * É resetado quando o perfil autenticado muda, reaproveitado por todas as instâncias
+ * de useUnreadCounts e sincronizado por listeners internos para evitar subscriptions
+ * duplicadas por tela.
  */
 const unreadMap = new Map<string, number>();
 const unreadListeners = new Set<() => void>();
@@ -63,6 +65,13 @@ function isChatActive(chatId?: string): boolean {
   return (unreadActiveChatMap.get(chatId) || 0) > 0;
 }
 
+function decrementActiveChatRef(chatId?: string) {
+  if (!chatId) return;
+  const current = unreadActiveChatMap.get(chatId) || 0;
+  if (current <= 1) unreadActiveChatMap.delete(chatId);
+  else unreadActiveChatMap.set(chatId, current - 1);
+}
+
 function incrementUnread(chatId: string) {
   unreadMap.set(chatId, (unreadMap.get(chatId) || 0) + 1);
   notifyUnreadListeners();
@@ -103,7 +112,7 @@ async function ensureUnreadSubscriptions(
             if (unreadMessageIds.has(msg.id)) return;
             unreadMessageIds.add(msg.id);
             unreadMessageOrder.push(msg.id);
-            if (unreadMessageIds.size > MAX_UNREAD_MESSAGE_IDS) {
+            if (unreadMessageOrder.length > MAX_UNREAD_MESSAGE_IDS) {
               while (unreadMessageOrder.length > TRIM_UNREAD_MESSAGE_IDS_TO) {
                 const oldest = unreadMessageOrder.shift();
                 if (oldest) unreadMessageIds.delete(oldest);
@@ -158,11 +167,7 @@ export function useUnreadCounts(activeChatId?: string) {
 
   useEffect(() => {
     const prevChatId = activeChatRef.current;
-    if (prevChatId && prevChatId !== activeChatId) {
-      const current = unreadActiveChatMap.get(prevChatId) || 0;
-      if (current <= 1) unreadActiveChatMap.delete(prevChatId);
-      else unreadActiveChatMap.set(prevChatId, current - 1);
-    }
+    if (prevChatId && prevChatId !== activeChatId) decrementActiveChatRef(prevChatId);
 
     if (activeChatId) {
       unreadActiveChatMap.set(activeChatId, (unreadActiveChatMap.get(activeChatId) || 0) + 1);
@@ -170,11 +175,7 @@ export function useUnreadCounts(activeChatId?: string) {
     activeChatRef.current = activeChatId;
 
     return () => {
-      const chatId = activeChatRef.current;
-      if (!chatId) return;
-      const current = unreadActiveChatMap.get(chatId) || 0;
-      if (current <= 1) unreadActiveChatMap.delete(chatId);
-      else unreadActiveChatMap.set(chatId, current - 1);
+      decrementActiveChatRef(activeChatRef.current);
     };
   }, [activeChatId]);
 
