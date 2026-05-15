@@ -16,6 +16,7 @@ import {
 } from '../../src/lib/offlineStorage';
 import { api } from '../../src/lib/api';
 import { colors, spacing, borderRadius } from '../../src/theme';
+import { useUnreadCounts } from '../../src/contexts/NotificationContext';
 
 interface ChatWithDepartment extends Chat {
   department?: Department;
@@ -36,6 +37,7 @@ export default function ChatsScreen() {
   const [newChatDepartmentId, setNewChatDepartmentId] = useState<string>('');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [creating, setCreating] = useState(false);
+  const { counts: unreadCounts, markChatAsRead } = useUnreadCounts();
 
   async function loadData() {
     try {
@@ -188,31 +190,46 @@ export default function ChatsScreen() {
         data={filteredChats}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.chatItem}
-            onPress={() => router.push(`/chat/${item.id}`)}
-          >
-            <View style={styles.chatIconContainer}>
-              {item.is_private ? (
-                <Ionicons name="lock-closed" size={18} color={colors.textMuted} />
-              ) : (
-                <Text style={styles.hashIcon}>#</Text>
-              )}
-            </View>
-            <View style={styles.chatInfo}>
-              <Text style={styles.chatName}>{item.name}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                {item.department && (
-                  <View style={styles.deptBadge}>
-                    <Text style={styles.deptBadgeText}>{item.department.name}</Text>
+        renderItem={({ item }) => {
+          const unreadCount = unreadCounts[item.id] || 0;
+          const hasUnread = unreadCount > 0;
+
+          return (
+            <TouchableOpacity
+              style={styles.chatItem}
+              onPress={() => {
+                markChatAsRead(item.id);
+                router.push(`/chat/${item.id}`);
+              }}
+            >
+              <View style={styles.chatIconContainer}>
+                {item.is_private ? (
+                  <Ionicons name="lock-closed" size={18} color={colors.textMuted} />
+                ) : (
+                  <Text style={styles.hashIcon}>#</Text>
+                )}
+                {hasUnread && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
                   </View>
                 )}
               </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
+              <View style={styles.chatInfo}>
+                <Text style={styles.chatName}>{item.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  {item.department && (
+                    <View style={styles.deptBadge}>
+                      <Text style={styles.deptBadgeText}>{item.department.name}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="chatbubbles-outline" size={48} color={colors.textMuted} />
@@ -393,6 +410,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceLight,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  unreadBadgeText: {
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: '700',
   },
   hashIcon: {
     color: colors.textMuted,
@@ -565,4 +601,3 @@ const styles = StyleSheet.create({
   companyPickerName: { fontSize: 15, fontWeight: '600', color: colors.text },
   companyPickerSlug: { fontSize: 12, color: colors.textMuted },
 });
-

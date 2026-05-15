@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Constants from 'expo-constants';
 import { Platform, AppState } from 'react-native';
 import { useAuth } from './AuthContext';
@@ -12,6 +12,163 @@ async function getNotificationsModule() {
   return Notifications;
 }
 
+// Estado global de não lidas — compartilhado entre telas
+const unreadMap = new Map<string, number>();
+const unreadListeners = new Set<() => void>();
+const unreadActiveChatMap = new Map<string, number>();
+const unreadSubscriptions = new Map<string, () => void>();
+const unreadMessageIds = new Set<string>();
+let unreadProfileId: string | null = null;
+let unreadSyncPromise: Promise<void> | null = null;
+
+function serializeUnreadMap(): Record<string, number> {
+  return Object.fromEntries(unreadMap.entries());
+}
+
+function notifyUnreadListeners() {
+  unreadListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {}
+  });
+}
+
+function resetUnreadSubscriptions() {
+  unreadSubscriptions.forEach((unsub) => {
+    try { unsub(); } catch {}
+  });
+  unreadSubscriptions.clear();
+  unreadMessageIds.clear();
+}
+
+function isChatActive(chatId?: string): boolean {
+  if (!chatId) return false;
+  return (unreadActiveChatMap.get(chatId) || 0) > 0;
+}
+
+function incrementUnread(chatId: string) {
+  unreadMap.set(chatId, (unreadMap.get(chatId) || 0) + 1);
+  notifyUnreadListeners();
+}
+
+async function ensureUnreadSubscriptions(
+  profileId: string,
+  subscribeChatMessages: (chatId: string, listener: (msg: any) => void) => () => void,
+) {
+  if (!profileId) return;
+
+  if (unreadProfileId !== profileId) {
+    resetUnreadSubscriptions();
+    unreadProfileId = profileId;
+    unreadMap.clear();
+    notifyUnreadListeners();
+  }
+
+  if (unreadSyncPromise) {
+    await unreadSyncPromise;
+    return;
+  }
+
+  unreadSyncPromise = (async () => {
+    try {
+      const companiesResult = await api.getUserCompanies();
+      const companies = companiesResult?.data || [];
+
+      for (const company of companies) {
+        const chatsResult = await api.getChats(company.id);
+        const chats = chatsResult?.data || [];
+
+        for (const chat of chats) {
+          if (!chat?.id || unreadSubscriptions.has(chat.id)) continue;
+          const unsub = subscribeChatMessages(chat.id, (msg) => {
+            if (!msg?.id || !msg?.chat_id) return;
+            if (msg.user_profile_id === unreadProfileId) return;
+            if (unreadMessageIds.has(msg.id)) return;
+            unreadMessageIds.add(msg.id);
+            if (unreadMessageIds.size > 2000) {
+              const keep = Array.from(unreadMessageIds).slice(-1000);
+              unreadMessageIds.clear();
+              keep.forEach((id) => unreadMessageIds.add(id));
+            }
+            if (isChatActive(msg.chat_id)) return;
+            incrementUnread(msg.chat_id);
+          });
+          unreadSubscriptions.set(chat.id, unsub);
+        }
+      }
+    } catch {
+      // Falha silenciosa para não bloquear o app.
+    } finally {
+      unreadSyncPromise = null;
+    }
+  })();
+
+  await unreadSyncPromise;
+}
+
+export function useUnreadCounts(activeChatId?: string) {
+  const { profile } = useAuth();
+  const { subscribeChatMessages } = useWebSocket();
+  const [counts, setCounts] = useState<Record<string, number>>(() => serializeUnreadMap());
+  const activeChatRef = useRef<string | undefined>(activeChatId);
+
+  useEffect(() => {
+    const syncCounts = () => {
+      setCounts(serializeUnreadMap());
+    };
+    unreadListeners.add(syncCounts);
+    syncCounts();
+    return () => {
+      unreadListeners.delete(syncCounts);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!profile?.id) {
+      unreadProfileId = null;
+      resetUnreadSubscriptions();
+      unreadMap.clear();
+      notifyUnreadListeners();
+      setCounts({});
+      return;
+    }
+    ensureUnreadSubscriptions(profile.id, subscribeChatMessages).catch(() => {});
+  }, [profile?.id, subscribeChatMessages]);
+
+  useEffect(() => {
+    const prevChatId = activeChatRef.current;
+    if (prevChatId && prevChatId !== activeChatId) {
+      const current = unreadActiveChatMap.get(prevChatId) || 0;
+      if (current <= 1) unreadActiveChatMap.delete(prevChatId);
+      else unreadActiveChatMap.set(prevChatId, current - 1);
+    }
+
+    if (activeChatId) {
+      unreadActiveChatMap.set(activeChatId, (unreadActiveChatMap.get(activeChatId) || 0) + 1);
+    }
+    activeChatRef.current = activeChatId;
+
+    return () => {
+      const chatId = activeChatRef.current;
+      if (!chatId) return;
+      const current = unreadActiveChatMap.get(chatId) || 0;
+      if (current <= 1) unreadActiveChatMap.delete(chatId);
+      else unreadActiveChatMap.set(chatId, current - 1);
+    };
+  }, [activeChatId]);
+
+  const markChatAsRead = useCallback((chatId: string) => {
+    if (!chatId) return;
+    unreadMap.set(chatId, 0);
+    notifyUnreadListeners();
+    setCounts((prev) => ({ ...prev, [chatId]: 0 }));
+  }, []);
+
+  const totalUnread = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+  return { counts, totalUnread, markChatAsRead };
+}
+
 /**
  * Hook para registrar e exibir notificações locais quando novas mensagens chegam.
  * Deve ser montado uma vez na raiz do app (em _layout.tsx).
@@ -19,7 +176,7 @@ async function getNotificationsModule() {
  */
 export function useNotifications(activeChatId?: string) {
   const { profile } = useAuth();
-  const { subscribeChatMessages } = useWebSocket();
+  const { subscribeChatMessages, subscribeAdminAlerts } = useWebSocket();
   const activeChatRef = useRef<string | undefined>(activeChatId);
   const lastMessageIds = useRef<Set<string>>(new Set());
   const chatNamesRef = useRef<Map<string, string>>(new Map());
@@ -158,6 +315,23 @@ export function useNotifications(activeChatId?: string) {
         if (cancelled) return;
         chatNamesRef.current = chatMap;
 
+        for (const company of companies) {
+          const unsub = subscribeAdminAlerts(company.id, async (alert) => {
+            if (isExpoGo) return;
+            const Notifications = await getNotificationsModule();
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: '⚠️ Alerta do Sistema',
+                body: alert.description || `Erro ${alert.status} em ${alert.endpoint}`,
+                data: { type: 'admin_alert', companyId: alert.company_id },
+                sound: true,
+              },
+              trigger: null,
+            });
+          });
+          unsubs.push(unsub);
+        }
+
         for (const chatId of chatMap.keys()) {
           const unsub = subscribeChatMessages(chatId, (msg) => {
             scheduleLocalNotification(msg).catch(() => {});
@@ -177,7 +351,7 @@ export function useNotifications(activeChatId?: string) {
         try { fn(); } catch {}
       });
     };
-  }, [profile?.id, subscribeChatMessages]);
+  }, [profile?.id, subscribeChatMessages, subscribeAdminAlerts]);
 }
 
 async function requestNotificationPermission(): Promise<string | null> {
