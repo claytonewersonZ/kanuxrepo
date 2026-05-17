@@ -3,6 +3,7 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { colors } from '../../src/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUnreadCounts } from '../../src/contexts/NotificationContext';
 
 function TabIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: string; focused: boolean }) {
   return (
@@ -14,6 +15,7 @@ function TabIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMa
 }
 
 export default function TabLayout() {
+  const { totalUnread } = useUnreadCounts();
   const insets = useSafeAreaInsets();
   const tabBottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 8) : insets.bottom;
 
@@ -63,6 +65,8 @@ export default function TabLayout() {
         name="chats"
         options={{
           title: 'Chats',
+          tabBarBadge: totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#8B5CF6', fontSize: 10 },
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} color={color} focused={focused} />
           ),

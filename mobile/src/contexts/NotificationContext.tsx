@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Constants from 'expo-constants';
 import { Platform, AppState } from 'react-native';
 import { useAuth } from './AuthContext';
@@ -13,13 +13,192 @@ async function getNotificationsModule() {
 }
 
 /**
+ * Estado global de mensagens não lidas compartilhado entre múltiplas telas/hooks.
+ * É resetado quando o perfil autenticado muda, reaproveitado por todas as instâncias
+ * de useUnreadCounts e sincronizado por listeners internos para evitar subscriptions
+ * duplicadas por tela.
+ */
+const unreadMap = new Map<string, number>();
+const unreadListeners = new Set<() => void>();
+const unreadActiveChatMap = new Map<string, number>();
+const unreadSubscriptions = new Map<string, () => void>();
+const unreadMessageIds = new Set<string>();
+const unreadMessageOrder: string[] = [];
+const MAX_UNREAD_MESSAGE_IDS = 2000;
+const TRIM_UNREAD_MESSAGE_IDS_TO = 1000;
+let unreadProfileId: string | null = null;
+let unreadSyncPromise: Promise<void> | null = null;
+
+type UnreadWsMessage = {
+  id?: string;
+  chat_id?: string;
+  user_profile_id?: string;
+};
+
+function serializeUnreadMap(): Record<string, number> {
+  return Object.fromEntries(unreadMap.entries());
+}
+
+function notifyUnreadListeners() {
+  unreadListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch (error) {
+      console.warn('[Notifications] Falha ao notificar listeners de unread', error);
+    }
+  });
+}
+
+function resetUnreadSubscriptions() {
+  unreadSubscriptions.forEach((unsub) => {
+    try { unsub(); } catch (error) {
+      console.warn('[Notifications] Falha ao encerrar subscription de unread', error);
+    }
+  });
+  unreadSubscriptions.clear();
+  unreadMessageIds.clear();
+  unreadMessageOrder.length = 0;
+}
+
+function isChatActive(chatId?: string): boolean {
+  if (!chatId) return false;
+  return (unreadActiveChatMap.get(chatId) || 0) > 0;
+}
+
+function decrementActiveChatRef(chatId?: string) {
+  if (!chatId) return;
+  const current = unreadActiveChatMap.get(chatId) || 0;
+  if (current <= 1) unreadActiveChatMap.delete(chatId);
+  else unreadActiveChatMap.set(chatId, current - 1);
+}
+
+function incrementUnread(chatId: string) {
+  unreadMap.set(chatId, (unreadMap.get(chatId) || 0) + 1);
+  notifyUnreadListeners();
+}
+
+async function ensureUnreadSubscriptions(
+  profileId: string,
+  subscribeChatMessages: (chatId: string, listener: (msg: UnreadWsMessage) => void) => () => void,
+) {
+  if (!profileId) return;
+
+  if (unreadProfileId !== profileId) {
+    resetUnreadSubscriptions();
+    unreadProfileId = profileId;
+    unreadMap.clear();
+    notifyUnreadListeners();
+  }
+
+  if (unreadSyncPromise) {
+    await unreadSyncPromise;
+    return;
+  }
+
+  unreadSyncPromise = (async () => {
+    try {
+      const companiesResult = await api.getUserCompanies();
+      const companies = companiesResult?.data || [];
+
+      for (const company of companies) {
+        const chatsResult = await api.getChats(company.id);
+        const chats = chatsResult?.data || [];
+
+        for (const chat of chats) {
+          if (!chat?.id || unreadSubscriptions.has(chat.id)) continue;
+          const unsub = subscribeChatMessages(chat.id, (msg) => {
+            if (!msg?.id || !msg?.chat_id) return;
+            if (msg.user_profile_id === unreadProfileId) return;
+            if (unreadMessageIds.has(msg.id)) return;
+            unreadMessageIds.add(msg.id);
+            unreadMessageOrder.push(msg.id);
+            if (unreadMessageOrder.length > MAX_UNREAD_MESSAGE_IDS) {
+              while (unreadMessageOrder.length > TRIM_UNREAD_MESSAGE_IDS_TO) {
+                const oldest = unreadMessageOrder.shift();
+                if (oldest) unreadMessageIds.delete(oldest);
+              }
+            }
+            if (isChatActive(msg.chat_id)) return;
+            incrementUnread(msg.chat_id);
+          });
+          unreadSubscriptions.set(chat.id, unsub);
+        }
+      }
+    } catch (error) {
+      console.warn('[Notifications] Falha ao configurar subscriptions de unread', error);
+    } finally {
+      unreadSyncPromise = null;
+    }
+  })();
+
+  await unreadSyncPromise;
+}
+
+export function useUnreadCounts(activeChatId?: string) {
+  const { profile } = useAuth();
+  const { subscribeChatMessages } = useWebSocket();
+  const [counts, setCounts] = useState<Record<string, number>>(() => serializeUnreadMap());
+  const activeChatRef = useRef<string | undefined>(activeChatId);
+
+  useEffect(() => {
+    const syncCounts = () => {
+      setCounts(serializeUnreadMap());
+    };
+    unreadListeners.add(syncCounts);
+    syncCounts();
+    return () => {
+      unreadListeners.delete(syncCounts);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!profile?.id) {
+      unreadProfileId = null;
+      resetUnreadSubscriptions();
+      unreadMap.clear();
+      notifyUnreadListeners();
+      setCounts({});
+      return;
+    }
+    ensureUnreadSubscriptions(profile.id, subscribeChatMessages).catch((error) => {
+      console.warn('[Notifications] Falha ao inicializar unread counts', error);
+    });
+  }, [profile?.id, subscribeChatMessages]);
+
+  useEffect(() => {
+    const prevChatId = activeChatRef.current;
+    if (prevChatId && prevChatId !== activeChatId) decrementActiveChatRef(prevChatId);
+
+    if (activeChatId) {
+      unreadActiveChatMap.set(activeChatId, (unreadActiveChatMap.get(activeChatId) || 0) + 1);
+    }
+    activeChatRef.current = activeChatId;
+
+    return () => {
+      decrementActiveChatRef(activeChatRef.current);
+    };
+  }, [activeChatId]);
+
+  const markChatAsRead = useCallback((chatId: string) => {
+    if (!chatId) return;
+    if ((unreadMap.get(chatId) || 0) === 0) return;
+    unreadMap.set(chatId, 0);
+    notifyUnreadListeners();
+  }, []);
+
+  const totalUnread = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+  return { counts, totalUnread, markChatAsRead };
+}
+
+/**
  * Hook para registrar e exibir notificações locais quando novas mensagens chegam.
  * Deve ser montado uma vez na raiz do app (em _layout.tsx).
  * Mostra notificação quando o usuário NÃO está visualizando o chat em questão.
  */
 export function useNotifications(activeChatId?: string) {
   const { profile } = useAuth();
-  const { subscribeChatMessages } = useWebSocket();
+  const { subscribeChatMessages, subscribeAdminAlerts } = useWebSocket();
   const activeChatRef = useRef<string | undefined>(activeChatId);
   const lastMessageIds = useRef<Set<string>>(new Set());
   const chatNamesRef = useRef<Map<string, string>>(new Map());
@@ -158,6 +337,23 @@ export function useNotifications(activeChatId?: string) {
         if (cancelled) return;
         chatNamesRef.current = chatMap;
 
+        for (const company of companies) {
+          const unsub = subscribeAdminAlerts(company.id, async (alert) => {
+            if (isExpoGo) return;
+            const Notifications = await getNotificationsModule();
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: '⚠️ Alerta do Sistema',
+                body: alert.description || `Erro ${alert.status} em ${alert.endpoint}`,
+                data: { type: 'admin_alert', companyId: alert.company_id },
+                sound: true,
+              },
+              trigger: null,
+            });
+          });
+          unsubs.push(unsub);
+        }
+
         for (const chatId of chatMap.keys()) {
           const unsub = subscribeChatMessages(chatId, (msg) => {
             scheduleLocalNotification(msg).catch(() => {});
@@ -177,7 +373,7 @@ export function useNotifications(activeChatId?: string) {
         try { fn(); } catch {}
       });
     };
-  }, [profile?.id, subscribeChatMessages]);
+  }, [profile?.id, subscribeChatMessages, subscribeAdminAlerts]);
 }
 
 async function requestNotificationPermission(): Promise<string | null> {

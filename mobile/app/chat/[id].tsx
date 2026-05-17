@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Alert, Image, ActivityIndicator, StatusBar } from 'react-native';
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { MediaPreviewModal } from '../../src/components/MediaPreviewModal';
@@ -8,6 +8,7 @@ import { TypingIndicator } from '../../src/components/TypingIndicator';
 import { colors, spacing } from '../../src/theme';
 import { useOfflineMessages } from '../../src/contexts/SyncContext';
 import { useWebSocket } from '../../src/contexts/WebSocketContext';
+import { useUnreadCounts } from '../../src/contexts/NotificationContext';
 import { supabase, getChatMembersForChat, addMemberToChat, removeMemberFromChat, getCompanyMembers, ChatMember, Chat } from '../../src/lib/supabase';
 import { api } from '../../src/lib/api';
 import { ENV } from '../../src/lib/env';
@@ -58,6 +59,7 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 8) : insets.bottom;
   const { subscribeChatMessages, subscribeChatTyping, subscribePresence, sendMessageWs, sendTypingWs, isConnected: wsConnected } = useWebSocket();
+  const { markChatAsRead } = useUnreadCounts(id as string);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState<string[]>([]);
@@ -78,6 +80,11 @@ export default function ChatScreen() {
   const [previewMedia, setPreviewMedia] = useState<{ uri: string; type: 'image' | 'document'; name?: string | null } | null>(null);
 
   const { messages, loading, refresh } = useOfflineMessages(id as string);
+
+  useFocusEffect(useCallback(() => {
+    if (!id) return;
+    markChatAsRead(id);
+  }, [id, markChatAsRead]));
 
   // Ref estável para o refresh — evita stale closure no Supabase Realtime
   const refreshRef = useRef(refresh);
@@ -1096,4 +1103,3 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
 });
-
