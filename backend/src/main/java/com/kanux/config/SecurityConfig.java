@@ -25,18 +25,28 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(@NonNull HttpSecurity http) throws Exception {
         return http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/verify-company").permitAll()
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/health").permitAll()
-                        .requestMatchers("/api/debug/**").permitAll()
-                        // WebSocket endpoints — autenticação feita via STOMP header
-                        .requestMatchers("/ws", "/ws/**", "/ws-native", "/ws-native/**").permitAll()
-                        .requestMatchers("/error").permitAll()
-                        .anyRequest().authenticated()
-                )
+            .csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                // Swagger/OpenAPI endpoints liberados
+                .requestMatchers(
+                    "/v3/api-docs",
+                    "/v3/api-docs/**",
+                    "/swagger-ui.html",
+                    "/swagger-ui/**",
+                    "/swagger-resources",
+                    "/swagger-resources/**",
+                    "/webjars/**"
+                ).permitAll()
+                .requestMatchers("/api/verify-company").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/health").permitAll()
+                .requestMatchers("/api/debug/**").permitAll()
+                // WebSocket endpoints — autenticação feita via STOMP header
+                .requestMatchers("/ws", "/ws/**", "/ws-native", "/ws-native/**").permitAll()
+                .requestMatchers("/error").permitAll()
+                .anyRequest().authenticated()
+            )
                 // Return 401 (not 403) for unauthenticated requests
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, authException) -> {
