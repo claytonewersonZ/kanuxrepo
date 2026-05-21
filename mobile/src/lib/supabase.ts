@@ -51,12 +51,9 @@ export type CompanyMember = {
   joined_at: string;
 };
 
-// ...definição única de Ticket mantida abaixo...
-  content: string;
-  attachments: any;
-  created_at: string;
-  updated_at: string;
-};
+
+// Definição única de Ticket
+
 
 export type Ticket = {
   id: string;
@@ -217,7 +214,19 @@ export async function getCompanyMembers(companyId: string): Promise<(Profile & {
   }
 }
 
-// Helper to get chats for a company
+// Definição de Chat
+export type Chat = {
+  id: string;
+  company_id: string;
+  department_id?: string | null;
+  name: string;
+  private_chat: boolean;
+  only_admins_send: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+};
+
 export async function getCompanyChats(companyId: string): Promise<Chat[]> {
   try {
     const result = await api.getChats(companyId);
@@ -228,9 +237,21 @@ export async function getCompanyChats(companyId: string): Promise<Chat[]> {
   }
 }
 
-// Helper to get messages for a chat
-// O backend retorna em ordem ASC (mais antigas primeiro) — NÃO invertemos aqui.
-// buildListItems espera ASC e faz .reverse() para o FlatList inverted=true.
+// Definição de Message
+export type Message = {
+  id: string;
+  chat_id: string;
+  user_profile_id: string;
+  content: string;
+  message_type: string;
+  media_url?: string;
+  media_name?: string;
+  client_message_id?: string;
+  attachments: string;
+  created_at: string;
+  updated_at?: string;
+};
+
 export async function getChatMessages(chatId: string, limit = 50): Promise<Message[]> {
   try {
     const result = await api.getMessages(chatId);
