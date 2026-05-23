@@ -1,3 +1,23 @@
+# Como compilar e rodar o backend pelo VS Code
+
+1. Abra a pasta `backend/` no VS Code.
+2. Localize o arquivo `KanuxBackendApplication.java` em `src/main/java/com/kanux/KanuxBackendApplication.java`.
+3. Clique em "Run" (▶️) ou "Debug" acima do método `main`.
+  - O VS Code irá compilar e executar o projeto automaticamente.
+4. O backend ficará disponível em `http://localhost:10000` (ou porta configurada).
+
+**Alternativa pelo terminal integrado:**
+```sh
+cd backend
+./mvnw spring-boot:run
+# ou no Windows
+mvnw.cmd spring-boot:run
+```
+
+**Dica:**
+Se aparecer erro, confira os logs no terminal do VS Code e envie aqui para diagnóstico.
+
+---
 # Estrutura do Backend Kanux
 
 ## Visão Geral

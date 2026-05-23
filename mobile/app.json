@@ -7,11 +7,7 @@
     "icon": "./assets/icon.png",
     "scheme": "kanux",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#09090B"
-    },
+    // ...existing code...
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kanux.mobile",
@@ -35,7 +31,18 @@
           "androidCollapsedTitle": "Mensagens"
         }
       ],
-      "expo-sqlite"
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#09090B"
+        }
+      ],
+      "expo-sqlite",
+      "expo-asset",
+      "expo-secure-store",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true
@@ -47,7 +54,10 @@
       "apiUrl": "https://kanux-mobile-web.onrender.com",
       "eas": {
         "projectId": "a8abab8f-4062-42df-9b42-0ad68186f26c"
-      }
+      },
+      "cli": {
+  "appVersionSource": "git-tag"
+}
     }
   }
 }

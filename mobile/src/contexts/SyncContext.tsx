@@ -8,7 +8,6 @@ import {
   saveMessagesOffline,
   addPendingMessage,
   getPendingTickets,
-  replacePendingTickets,
   addPendingTicket,
   saveCompaniesOffline,
   saveChatsOffline,
@@ -16,6 +15,7 @@ import {
   saveTicketsOffline,
   updateLastSync,
   getLastSync,
+  replacePendingTickets,
 } from '../lib/offlineStorage';
 import {
   getChatMessages,
@@ -24,7 +24,6 @@ import {
   getDepartments,
   getUserCompanies,
   sendMessage as sendApiMessage,
-  sendTicketComment as sendApiTicketComment,
   createTicket as sendApiCreateTicket,
 } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -198,7 +197,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           }
           if (!sent) {
             try {
-              const apiSent = await sendApiCreateTicket(ticket);
+              // Ajuste os campos conforme a assinatura real de createTicket
+              const apiSent = await sendApiCreateTicket(
+                ticket.title,
+                ticket.description,
+                ticket.company_id,
+                ticket.department_id,
+                ticket.priority || 'LOW'
+              );
               sent = !!apiSent;
             } catch (e) {
               sent = false;

@@ -1,5 +1,9 @@
 {
   "devDependencies": {
+    "@types/expo": "^32.0.13",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
+    "@types/react-native": "^0.72.8",
     "sharp": "^0.34.5",
     "typescript": "^6.0.3"
   }

@@ -1,3 +1,11 @@
+// Substitui todos os tickets pendentes
+export async function replacePendingTickets(tickets: any[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.PENDING_TICKETS, JSON.stringify(tickets));
+  } catch (error) {
+    console.error('Error replacing pending tickets:', error);
+  }
+}
 // Offline storage for mobile app using AsyncStorage
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

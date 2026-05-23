@@ -5,7 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnreadCounts } from '../../src/contexts/NotificationContext';
 
-function TabIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: string; focused: boolean }) {
+import type { ColorValue } from 'react-native';
+function TabIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: string | ColorValue; focused: boolean }) {
   return (
     <View style={[styles.tabIconContainer, focused && styles.tabIconActive]}>
       <Ionicons name={name} size={24} color={color} />
