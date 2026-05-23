@@ -37,8 +37,8 @@ public class ApiWebSocketController {
     }
 
     // Chats
-    @MessageMapping("/chats.list")
-    @SendToUser("/topic/chats")
+    @MessageMapping("/api.chats.list")
+    @SendToUser("/topic/api-chats")
     public List<Map<String, Object>> listChats(@Payload Map<String, Object> req, Principal principal) {
         return new ArrayList<>();
     }

@@ -1,3 +1,25 @@
+# Histórico de Conflito de Destino STOMP
+
+## 2026-05-23 - Correção de conflito /chats.list
+
+**Problema:**
+Dois métodos estavam anotados com `@MessageMapping("/chats.list")`:
+- `ChatWebSocketController.listChats` (`List<ChatDTO>`, destino: `/chats.list`)
+- `ApiWebSocketController.listChats` (`List<Map<String, Object>>`, destino: `/chats.list`)
+
+**Sintoma:**
+Erro de deploy: `Ambiguous mapping found. Cannot map ... There is already ... mapped.`
+
+**Solução:**
+- O método em `ApiWebSocketController` foi alterado para:
+    - `@MessageMapping("/api.chats.list")`
+    - `@SendToUser("/topic/api-chats")`
+- O método em `ChatWebSocketController` permanece como handler principal de `/chats.list`.
+
+**Lição:**
+Nunca duplique destinos STOMP entre controllers. Cada destino deve ser único no backend.
+
+---
 # Backend WebSocket API (Spring Boot)
 
 ## Visão Geral

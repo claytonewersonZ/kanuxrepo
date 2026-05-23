@@ -56,5 +56,23 @@ backend/
 
 ---
 
+## Histórico de Problemas e Soluções Flyway
+
+- **2026-05-23:**
+    - Problema: Erro de checksum ou descrição em migrations Flyway após renomear, editar ou mover arquivos.
+    - Sintoma: "Migration checksum mismatch" ou "Migration description mismatch" no deploy.
+    - Solução:
+        1. Execute o comando SQL para corrigir a descrição diretamente no banco:
+           ```sql
+           UPDATE flyway_schema_history
+           SET description = 'add password hash to user profiles'
+           WHERE version = '2';
+           ```
+        2. Se o erro for de checksum, rode `flyway repair` ou delete o registro da migration e deixe o Flyway reaplicar.
+        3. Sempre que renomear ou alterar migrations já aplicadas, alinhe o histórico do banco com o código.
+    - Referência: [[backend-websocket.md]]
+
+---
+
 ## Histórico de Alterações
 - 2026-05-23: Estrutura inicial documentada.
