@@ -21,6 +21,7 @@
 
     <properties>
         <java.version>21</java.version>
+        <lombok.version>1.18.38</lombok.version>
     </properties>
 
     <dependencies>
@@ -30,6 +31,7 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>2.6.0</version>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -50,6 +52,7 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- Flyway 10.x: flyway-database-postgresql necessário separado -->
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
@@ -104,13 +107,13 @@
     </dependencies>
 
     <build>
-        <finalName>kanux-backend</finalName> <!-- Nome final do JAR -->
+        <finalName>kanux-backend</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <finalName>kanux-backend</finalName> <!-- Força o nome -->
+                    <finalName>kanux-backend</finalName>
                 </configuration>
             </plugin>
             <plugin>
