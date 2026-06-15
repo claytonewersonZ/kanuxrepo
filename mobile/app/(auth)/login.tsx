@@ -19,61 +19,27 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        await initApi();
-        console.log('✅ [LoginScreen] API initialized successfully');
-      } catch (e) {
-        console.log('⚠️ [LoginScreen] API init failed, will retry on request', e);
-      }
-    })();
-  }, []);
+  useEffect(() => { initApi().catch(() => {}); }, []);
 
   async function handleAuth() {
     if (!email || !password) { Alert.alert('Erro', 'Preencha todos os campos'); return; }
     if (!isSignUp && !companySlug) { Alert.alert('Erro', 'Informe o número da empresa'); return; }
     setLoading(true);
     try {
-      // Garante que a API foi inicializada antes de qualquer chamada
-      await initApi();
-
       if (isSignUp) {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         Alert.alert('Sucesso', 'Conta criada! Verifique seu email.');
       } else {
-        console.log('[LoginScreen] Verifying company:', companySlug.trim());
         const result = await api.verifyCompany(companySlug.trim());
-        console.log('[LoginScreen] Company verification result:', result);
         if (!result.success) { Alert.alert('Erro', result.error || 'Empresa não encontrada'); return; }
-
-        console.log('[LoginScreen] Signing in with Supabase...');
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-
-        console.log('[LoginScreen] Login successful, setting auth token...');
         if (data.session?.access_token) setAuthToken(data.session.access_token);
-
-        console.log('[LoginScreen] Navigating to tabs...');
         router.replace('/(tabs)');
       }
     } catch (e: any) {
-      console.log('[LoginScreen] Login error:', { name: e?.name, message: e?.message });
-
-      if (e?.name === 'AbortError') {
-        Alert.alert(
-          'Tempo Esgotado',
-          'O servidor está demorando para responder (cold start). Aguarde alguns segundos e tente novamente.'
-        );
-      } else if (typeof e?.message === 'string' && e.message.includes('JDBC')) {
-        Alert.alert(
-          'Erro no Servidor',
-          'O servidor está com problemas de conexão ao banco de dados. Tente novamente em alguns instantes.'
-        );
-      } else {
-        Alert.alert('Erro', e?.message || 'Erro ao autenticar');
-      }
+      Alert.alert('Erro', e.message || 'Erro ao autenticar');
     } finally { setLoading(false); }
   }
 

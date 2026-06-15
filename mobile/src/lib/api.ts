@@ -124,9 +124,9 @@ async function apiRequest<T = any>(endpoint: string, options: RequestInit = {}, 
   
   console.log(`📡 API ${options.method || 'GET'} ${endpoint} | auth=${!!currentToken} | token=${currentToken ? currentToken.substring(0, 20) + '...' : 'null'}`);
 
-  // Timeout de 70s — suporta o cold start do Render free tier (30-60s)
+  // Timeout de 12s — evita travar durante cold-start do Render
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 70000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
   
   let response: Response;
   try {

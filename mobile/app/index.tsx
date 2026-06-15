@@ -5,11 +5,37 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../src/contexts/AuthContext';
 import { colors } from '../src/theme';
 
 export default function IndexScreen() {
-  // A navegação é controlada inteiramente pelo AuthGate em app/_layout.tsx.
-  // Este componente serve apenas como tela de splash enquanto o AuthGate decide a rota.
+  const { user, profile, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+
+    // Já logado + perfil/empresa OK → tabs
+    if (user && profile) {
+      router.replace('/(tabs)');
+      return;
+    }
+
+    // Logado mas sem perfil/empresa → selecionar empresa
+    if (user && !profile) {
+      router.replace('/company/select');
+      return;
+    }
+
+    // Não logado → login
+    if (!user) {
+      router.replace('/(auth)/login');
+      return;
+    }
+  }, [user, profile, loading, router]);
+
   return (
     <View style={styles.container}>
       {/* Logo Kanux */}
